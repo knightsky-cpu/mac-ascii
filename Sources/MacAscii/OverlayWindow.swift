@@ -40,4 +40,8 @@ final class OverlayWindow: NSPanel {
     func lowerForMenuAccess() {
         level = Self.menuAccessibleLevel
     }
+
+    var levelDescription: String {
+        "raw=\(level.rawValue)"
+    }
 }

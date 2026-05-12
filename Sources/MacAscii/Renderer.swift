@@ -22,6 +22,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let lock = NSLock()
     private var latestPixelBuffer: CVPixelBuffer?
     private var startedAt = CFAbsoluteTimeGetCurrent()
+    private var didLogRenderState = false
 
     init?(metalView: MTKView, state: AppState, displayScale: CGFloat) {
         guard let device = metalView.device,
@@ -82,15 +83,33 @@ final class Renderer: NSObject, MTKViewDelegate {
             return
         }
 
+        let renderState = state.sanitizedRenderState()
+        let viewportSize = SIMD2(
+            Float(view.drawableSize.width) / max(1.0, displayScale),
+            Float(view.drawableSize.height) / max(1.0, displayScale)
+        )
+        let sourceSize = SIMD2(Float(sourceTexture.width), Float(sourceTexture.height))
+
+        if !didLogRenderState {
+            print(
+                "MacAscii: render-state " +
+                "drawable=\(Int(view.drawableSize.width))x\(Int(view.drawableSize.height)) " +
+                "viewport=\(Int(viewportSize.x))x\(Int(viewportSize.y)) " +
+                "source=\(Int(sourceSize.x))x\(Int(sourceSize.y)) " +
+                "display-scale=\(displayScale) " +
+                "cell-size=\(renderState.cellSize) " +
+                "style-mode=\(renderState.styleMode) " +
+                "luminance-buckets=\(renderState.luminanceBuckets)"
+            )
+            didLogRenderState = true
+        }
+
         var uniforms = Uniforms(
-            viewportSize: SIMD2(
-                Float(view.drawableSize.width) / max(1.0, displayScale),
-                Float(view.drawableSize.height) / max(1.0, displayScale)
-            ),
-            sourceSize: SIMD2(Float(sourceTexture.width), Float(sourceTexture.height)),
-            cellSize: state.activeGrid.cellSize,
-            styleMode: state.activeStyle.mode,
-            luminanceBuckets: Int32(state.luminanceMode.bucketCount),
+            viewportSize: viewportSize,
+            sourceSize: sourceSize,
+            cellSize: renderState.cellSize,
+            styleMode: renderState.styleMode,
+            luminanceBuckets: renderState.luminanceBuckets,
             time: Float(CFAbsoluteTimeGetCurrent() - startedAt)
         )
 

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gridMenuItem: NSMenuItem?
     private var styleMenuItem: NSMenuItem?
     private var luminanceMenuItem: NSMenuItem?
+    private var windowLevelMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -61,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             window.orderOut(nil)
         }
+        logAppRenderState(reason: "startup")
 
         captureManager = ScreenCaptureManager { [weak renderer] pixelBuffer in
             renderer?.update(pixelBuffer: pixelBuffer)
@@ -133,6 +135,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleLuminanceItem.target = self
         menu.addItem(toggleLuminanceItem)
 
+        let resetItem = NSMenuItem(
+            title: "Reset Visual Defaults",
+            action: #selector(resetVisualDefaultsFromMenu),
+            keyEquivalent: ""
+        )
+        resetItem.target = self
+        menu.addItem(resetItem)
+
+        menu.addItem(.separator())
+
         let gridMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         gridMenuItem.isEnabled = false
         menu.addItem(gridMenuItem)
@@ -144,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let luminanceMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         luminanceMenuItem.isEnabled = false
         menu.addItem(luminanceMenuItem)
+
+        let windowLevelMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        windowLevelMenuItem.isEnabled = false
+        menu.addItem(windowLevelMenuItem)
 
         menu.addItem(.separator())
 
@@ -157,6 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.gridMenuItem = gridMenuItem
         self.styleMenuItem = styleMenuItem
         self.luminanceMenuItem = luminanceMenuItem
+        self.windowLevelMenuItem = windowLevelMenuItem
         refreshStatusMenu()
     }
 
@@ -165,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gridMenuItem?.title = "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))"
         styleMenuItem?.title = "Style: \(state.activeStyle.name)"
         luminanceMenuItem?.title = "Luminance: \(state.luminanceMode.bucketCount) buckets"
+        windowLevelMenuItem?.title = "Window level: \(window?.levelDescription ?? "unavailable")"
     }
 
     @objc private func toggleOverlayFromMenu() {
@@ -181,6 +199,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleLuminanceFromMenu() {
         handle(command: .toggleLuminance)
+    }
+
+    @objc private func resetVisualDefaultsFromMenu() {
+        state.resetVisualDefaults()
+        applyStateToUI()
+        logAppRenderState(reason: "reset-menu")
     }
 
     @objc private func quitFromMenu() {
@@ -208,6 +232,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window?.orderOut(nil)
         }
         refreshStatusMenu()
+    }
+
+    private func logAppRenderState(reason: String) {
+        let renderState = state.sanitizedRenderState()
+        print(
+            "MacAscii: app-state reason=\(reason) " +
+            "visible=\(state.overlayVisible) " +
+            "grid=\(state.activeGrid.name) cell-size=\(renderState.cellSize) " +
+            "style=\(state.activeStyle.name) style-mode=\(renderState.styleMode) " +
+            "luminance-buckets=\(renderState.luminanceBuckets) " +
+            "window-level=\(window?.levelDescription ?? "unavailable")"
+        )
     }
 }
 

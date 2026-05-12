@@ -25,6 +25,11 @@ struct VisualStyle {
 }
 
 final class AppState {
+    static let defaultGridName = "micro-ascii"
+    static let defaultStyleName = "classic-amber"
+    static let defaultLuminanceMode: LuminanceMode = .classic10
+    static let defaultOverlayVisible = true
+
     private enum SettingsKey {
         static let overlayVisible = "overlayVisible"
         static let gridName = "gridName"
@@ -134,6 +139,25 @@ final class AppState {
         logState("set-luminance")
     }
 
+    func resetVisualDefaults() {
+        overlayVisible = Self.defaultOverlayVisible
+        gridIndex = gridPresets.firstIndex { $0.name == Self.defaultGridName } ?? 3
+        styleIndex = visualStyles.firstIndex { $0.name == Self.defaultStyleName } ?? 0
+        luminanceMode = Self.defaultLuminanceMode
+        save()
+        logState("reset-visual-defaults")
+    }
+
+    func sanitizedRenderState() -> (cellSize: Float, styleMode: Int32, luminanceBuckets: Int32) {
+        let cellSize = max(1.0, activeGrid.cellSize)
+        let knownStyleModes = Set(visualStyles.map(\.mode))
+        let styleMode = knownStyleModes.contains(activeStyle.mode) ? activeStyle.mode : 0
+        let buckets = luminanceMode.bucketCount
+        let luminanceBuckets = (buckets == 10 || buckets == 20) ? Int32(buckets) : 10
+
+        return (cellSize, styleMode, luminanceBuckets)
+    }
+
     private func load() {
         if defaults.object(forKey: SettingsKey.overlayVisible) != nil {
             overlayVisible = defaults.bool(forKey: SettingsKey.overlayVisible)
@@ -166,7 +190,8 @@ final class AppState {
         print(
             "MacAscii: \(reason) visible=\(overlayVisible) " +
             "grid=\(activeGrid.name) cell-size=\(activeGrid.cellSize) " +
-            "style=\(activeStyle.name) luminance-buckets=\(luminanceMode.bucketCount)"
+            "style=\(activeStyle.name) style-mode=\(activeStyle.mode) " +
+            "luminance-buckets=\(luminanceMode.bucketCount)"
         )
     }
 }
