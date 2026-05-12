@@ -7,6 +7,8 @@ final class HotkeyManager {
         case cycleGrid = 2
         case cycleStyle = 3
         case toggleLuminance = 4
+        case decreaseOpacity = 5
+        case increaseOpacity = 6
     }
 
     private var hotkeys: [EventHotKeyRef?] = []
@@ -61,6 +63,8 @@ final class HotkeyManager {
         register(command: .cycleGrid, keyCode: UInt32(kVK_ANSI_Period))
         register(command: .cycleStyle, keyCode: UInt32(kVK_ANSI_Quote))
         register(command: .toggleLuminance, keyCode: UInt32(kVK_ANSI_Comma))
+        register(command: .decreaseOpacity, keyCode: UInt32(kVK_ANSI_Minus))
+        register(command: .increaseOpacity, keyCode: UInt32(kVK_ANSI_Equal))
     }
 
     func stop() {

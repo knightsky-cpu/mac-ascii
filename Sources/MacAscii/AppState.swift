@@ -29,6 +29,7 @@ final class AppState {
     static let defaultStyleName = "classic-amber"
     static let defaultLuminanceMode: LuminanceMode = .classic10
     static let defaultOverlayVisible = true
+    static let defaultOverlayOpacity: Float = 0.90
 
     private enum SettingsKey {
         static let overlayVisible = "overlayVisible"
@@ -73,6 +74,7 @@ final class AppState {
     private(set) var styleIndex = 0
     private(set) var luminanceMode: LuminanceMode = .classic10
     private(set) var overlayVisible = true
+    private(set) var overlayOpacity = AppState.defaultOverlayOpacity
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -107,6 +109,14 @@ final class AppState {
         setLuminanceMode(luminanceMode == .classic10 ? .fine20 : .classic10)
     }
 
+    func increaseOpacity() {
+        setOverlayOpacity(overlayOpacity + 0.05)
+    }
+
+    func decreaseOpacity() {
+        setOverlayOpacity(overlayOpacity - 0.05)
+    }
+
     func setOverlayVisible(_ visible: Bool) {
         overlayVisible = visible
         save()
@@ -139,23 +149,30 @@ final class AppState {
         logState("set-luminance")
     }
 
+    func setOverlayOpacity(_ opacity: Float) {
+        overlayOpacity = min(1.0, max(0.10, opacity))
+        logState("set-opacity")
+    }
+
     func resetVisualDefaults() {
         overlayVisible = Self.defaultOverlayVisible
         gridIndex = gridPresets.firstIndex { $0.name == Self.defaultGridName } ?? 3
         styleIndex = visualStyles.firstIndex { $0.name == Self.defaultStyleName } ?? 0
         luminanceMode = Self.defaultLuminanceMode
+        overlayOpacity = Self.defaultOverlayOpacity
         save()
         logState("reset-visual-defaults")
     }
 
-    func sanitizedRenderState() -> (cellSize: Float, styleMode: Int32, luminanceBuckets: Int32) {
+    func sanitizedRenderState() -> (cellSize: Float, styleMode: Int32, luminanceBuckets: Int32, opacity: Float) {
         let cellSize = max(1.0, activeGrid.cellSize)
         let knownStyleModes = Set(visualStyles.map(\.mode))
         let styleMode = knownStyleModes.contains(activeStyle.mode) ? activeStyle.mode : 0
         let buckets = luminanceMode.bucketCount
         let luminanceBuckets = (buckets == 10 || buckets == 20) ? Int32(buckets) : 10
+        let opacity = min(1.0, max(0.10, overlayOpacity))
 
-        return (cellSize, styleMode, luminanceBuckets)
+        return (cellSize, styleMode, luminanceBuckets, opacity)
     }
 
     private func load() {
@@ -191,7 +208,8 @@ final class AppState {
             "MacAscii: \(reason) visible=\(overlayVisible) " +
             "grid=\(activeGrid.name) cell-size=\(activeGrid.cellSize) " +
             "style=\(activeStyle.name) style-mode=\(activeStyle.mode) " +
-            "luminance-buckets=\(luminanceMode.bucketCount)"
+            "luminance-buckets=\(luminanceMode.bucketCount) " +
+            "opacity=\(Int(overlayOpacity * 100))%"
         )
     }
 }

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gridMenuItem: NSMenuItem?
     private var styleMenuItem: NSMenuItem?
     private var luminanceMenuItem: NSMenuItem?
+    private var opacityMenuItem: NSMenuItem?
     private var windowLevelMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -81,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusMenu()
 
         state.logState("started")
-        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+, luminance")
+        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -135,6 +136,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleLuminanceItem.target = self
         menu.addItem(toggleLuminanceItem)
 
+        let opacityDownItem = NSMenuItem(
+            title: "Opacity Down",
+            action: #selector(opacityDownFromMenu),
+            keyEquivalent: ""
+        )
+        opacityDownItem.target = self
+        menu.addItem(opacityDownItem)
+
+        let opacityUpItem = NSMenuItem(
+            title: "Opacity Up",
+            action: #selector(opacityUpFromMenu),
+            keyEquivalent: ""
+        )
+        opacityUpItem.target = self
+        menu.addItem(opacityUpItem)
+
         let resetItem = NSMenuItem(
             title: "Reset Visual Defaults",
             action: #selector(resetVisualDefaultsFromMenu),
@@ -157,6 +174,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         luminanceMenuItem.isEnabled = false
         menu.addItem(luminanceMenuItem)
 
+        let opacityMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        opacityMenuItem.isEnabled = false
+        menu.addItem(opacityMenuItem)
+
         let windowLevelMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         windowLevelMenuItem.isEnabled = false
         menu.addItem(windowLevelMenuItem)
@@ -173,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.gridMenuItem = gridMenuItem
         self.styleMenuItem = styleMenuItem
         self.luminanceMenuItem = luminanceMenuItem
+        self.opacityMenuItem = opacityMenuItem
         self.windowLevelMenuItem = windowLevelMenuItem
         refreshStatusMenu()
     }
@@ -182,6 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gridMenuItem?.title = "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))"
         styleMenuItem?.title = "Style: \(state.activeStyle.name)"
         luminanceMenuItem?.title = "Luminance: \(state.luminanceMode.bucketCount) buckets"
+        opacityMenuItem?.title = "Opacity: \(Int(state.overlayOpacity * 100))%"
         windowLevelMenuItem?.title = "Window level: \(window?.levelDescription ?? "unavailable")"
     }
 
@@ -199,6 +222,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleLuminanceFromMenu() {
         handle(command: .toggleLuminance)
+    }
+
+    @objc private func opacityDownFromMenu() {
+        handle(command: .decreaseOpacity)
+    }
+
+    @objc private func opacityUpFromMenu() {
+        handle(command: .increaseOpacity)
     }
 
     @objc private func resetVisualDefaultsFromMenu() {
@@ -221,6 +252,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.cycleStyle()
         case .toggleLuminance:
             state.toggleLuminanceMode()
+        case .decreaseOpacity:
+            state.decreaseOpacity()
+        case .increaseOpacity:
+            state.increaseOpacity()
         }
         applyStateToUI()
     }
@@ -242,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "grid=\(state.activeGrid.name) cell-size=\(renderState.cellSize) " +
             "style=\(state.activeStyle.name) style-mode=\(renderState.styleMode) " +
             "luminance-buckets=\(renderState.luminanceBuckets) " +
+            "opacity=\(Int(renderState.opacity * 100))% " +
             "window-level=\(window?.levelDescription ?? "unavailable")"
         )
     }

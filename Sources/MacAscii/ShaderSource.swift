@@ -14,6 +14,7 @@ enum ShaderSource {
         float cellSize;
         int styleMode;
         int luminanceBuckets;
+        float opacity;
         float time;
     };
 
@@ -204,7 +205,7 @@ enum ShaderSource {
         else if (uniforms.styleMode == 9) styledColor = moonColor;
         else if (uniforms.styleMode == 10) styledColor = thermalColor;
 
-        return float4(styledColor, 0.90);
+        return float4(styledColor, clamp(uniforms.opacity, 0.10, 1.0));
     }
     """
 }
