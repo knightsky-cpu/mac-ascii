@@ -152,6 +152,14 @@ enum ShaderSource {
         asciiMask = mix(asciiMask, edgeStrokeMask, edgeReplaceWeight);
         float edgeMask = smoothstep(0.20, 0.88, edgeGlyph * coherentEdgeStrength);
         float inkAmount = clamp(0.35 + (max(level, coherentEdgeStrength) * 0.65), 0.0, 1.0);
+        float asciiGridCompensation = smoothstep(3.0, 8.0, uniforms.cellSize);
+        float asciiEnergyLift = (0.05 + (0.10 * level)) * asciiGridCompensation;
+        float asciiNormalizedMask = clamp(
+            asciiMask + ((1.0 - asciiMask) * asciiEnergyLift),
+            0.0,
+            1.0
+        );
+        float styleMask = uniforms.renderMode == 0 ? asciiNormalizedMask : asciiMask;
 
         float3 posterColor = floor((pow(clamp(cellColor, float3(0.0), float3(1.0)), float3(0.9)) * 9.0) + 0.5) / 9.0;
         float grayValue = luminance(posterColor);
@@ -161,45 +169,45 @@ enum ShaderSource {
 
         float3 classicShadow = float3(0.12, 0.065, 0.018);
         float3 classicAmber = float3(1.0, 0.72, 0.18);
-        float3 classicColor = mix(classicShadow, mix(classicShadow, classicAmber, inkAmount), asciiMask);
+        float3 classicColor = mix(classicShadow, mix(classicShadow, classicAmber, inkAmount), styleMask);
 
         float3 darkShadow = float3(0.030, 0.014, 0.003);
         float3 darkAmber = float3(0.78, 0.36, 0.055);
-        float3 darkColor = mix(darkShadow, mix(darkShadow, darkAmber, inkAmount), asciiMask);
+        float3 darkColor = mix(darkShadow, mix(darkShadow, darkAmber, inkAmount), styleMask);
         darkColor = mix(darkColor, darkColor + float3(0.12, 0.045, 0.006), edgeMask * 0.45);
 
         float3 crtPalette = mix(gray, posterColor, 0.62);
         crtPalette = pow(clamp(crtPalette * 1.12, float3(0.0), float3(1.0)), float3(0.86));
         crtPalette *= mix(float3(0.80, 0.96, 1.16), float3(1.20, 1.02, 0.80), level);
-        float3 crtColor = mix(float3(0.018, 0.030, 0.045), mix(float3(0.018, 0.030, 0.045), crtPalette, inkAmount), asciiMask);
+        float3 crtColor = mix(float3(0.018, 0.030, 0.045), mix(float3(0.018, 0.030, 0.045), crtPalette, inkAmount), styleMask);
         crtColor *= mix(0.74, 1.0, vignette);
 
         float hash = fract(sin(dot(floor(cell), float2(127.1, 311.7))) * 43758.5453);
         float3 hybridEdge = mix(float3(1.0, 0.78, 0.42), float3(1.0, 0.38, 0.82), step(0.5, hash));
         float3 hybridBase = mix(gray, posterColor, 0.78) * float3(0.96, 1.02, 1.08);
-        float3 hybridColor = mix(float3(0.018, 0.022, 0.030), mix(float3(0.018, 0.022, 0.030), hybridBase, inkAmount), asciiMask);
+        float3 hybridColor = mix(float3(0.018, 0.022, 0.030), mix(float3(0.018, 0.022, 0.030), hybridBase, inkAmount), styleMask);
         hybridColor = mix(hybridColor, hybridEdge, edgeMask * 0.55);
 
         float3 invertColor = mix(float3(0.02, 0.02, 0.025), pow(float3(1.0) - posterColor, float3(0.92)), inkAmount);
-        invertColor = mix(float3(0.02, 0.02, 0.025), invertColor, asciiMask);
+        invertColor = mix(float3(0.02, 0.02, 0.025), invertColor, styleMask);
 
         float3 cyberBase = mix(gray, posterColor, 0.52) * float3(0.65, 0.92, 1.28);
         float3 cyberGlow = mix(float3(1.0, 0.12, 0.72), float3(0.72, 0.18, 1.0), step(0.46, hash));
-        float3 cyberColor = mix(float3(0.025, 0.010, 0.050), mix(float3(0.025, 0.010, 0.050), cyberBase, inkAmount), asciiMask);
+        float3 cyberColor = mix(float3(0.025, 0.010, 0.050), mix(float3(0.025, 0.010, 0.050), cyberBase, inkAmount), styleMask);
         cyberColor = mix(cyberColor, cyberGlow, edgeMask * 0.65);
         cyberColor *= mix(0.76, 1.0, vignette);
 
         float3 phosphorShadow = float3(0.002, 0.020, 0.010);
         float3 phosphorInk = mix(float3(0.12, 0.42, 0.18), float3(0.72, 1.00, 0.50), level);
         float scanline = 0.88 + (0.12 * sin((uv.y * uniforms.viewportSize.y * 3.14159) + uniforms.time * 8.0));
-        float3 phosphorColor = mix(phosphorShadow, mix(phosphorShadow, phosphorInk, inkAmount), asciiMask);
+        float3 phosphorColor = mix(phosphorShadow, mix(phosphorShadow, phosphorInk, inkAmount), styleMask);
         phosphorColor = mix(phosphorColor, phosphorColor + float3(0.10, 0.28, 0.08), edgeMask * 0.45);
         phosphorColor *= scanline * mix(0.76, 1.0, vignette);
 
         float3 paperBase = float3(0.94, 0.91, 0.82);
         float3 paperFiber = paperBase + ((hash - 0.5) * float3(0.035, 0.030, 0.018));
         float3 inkTone = mix(float3(0.30, 0.22, 0.14), float3(0.035, 0.030, 0.024), inkAmount);
-        float3 paperColor = mix(paperFiber, inkTone, clamp(asciiMask * inkAmount, 0.0, 1.0));
+        float3 paperColor = mix(paperFiber, inkTone, clamp(styleMask * inkAmount, 0.0, 1.0));
         paperColor = mix(paperColor, float3(0.08, 0.055, 0.030), edgeMask * 0.70);
 
         float3 blueprintBase = float3(0.012, 0.060, 0.140);
@@ -208,20 +216,20 @@ enum ShaderSource {
             1.0 - smoothstep(0.015, 0.045, min(local.x, 1.0 - local.x)),
             1.0 - smoothstep(0.015, 0.045, min(local.y, 1.0 - local.y))
         );
-        float3 blueprintColor = mix(blueprintBase, blueprintInk, asciiMask);
+        float3 blueprintColor = mix(blueprintBase, blueprintInk, styleMask);
         blueprintColor = mix(blueprintColor, float3(0.45, 0.76, 1.0), blueprintGrid * 0.18);
         blueprintColor = mix(blueprintColor, float3(1.0, 0.95, 0.65), edgeMask * 0.42);
 
         float3 moonBase = float3(0.012, 0.014, 0.018);
         float3 moonInk = mix(float3(0.18, 0.22, 0.28), float3(0.86, 0.92, 1.0), inkAmount);
-        float3 moonColor = mix(moonBase, moonInk, asciiMask);
+        float3 moonColor = mix(moonBase, moonInk, styleMask);
         moonColor = mix(moonColor, float3(0.62, 0.82, 1.0), edgeMask * 0.48);
         moonColor *= mix(0.70, 1.0, vignette);
 
         float3 thermalCold = float3(0.020, 0.020, 0.070);
         float3 thermalMid = mix(float3(0.05, 0.26, 0.75), float3(0.95, 0.36, 0.10), smoothstep(0.20, 0.78, level));
         float3 thermalHot = mix(thermalMid, float3(1.0, 0.92, 0.30), smoothstep(0.78, 1.0, level));
-        float3 thermalColor = mix(thermalCold, thermalHot, asciiMask * inkAmount);
+        float3 thermalColor = mix(thermalCold, thermalHot, styleMask * inkAmount);
         thermalColor = mix(thermalColor, float3(0.05, 1.0, 0.82), edgeMask * 0.62);
 
         float3 styledColor = classicColor;
@@ -275,6 +283,9 @@ enum ShaderSource {
             blockColor = blockColor + highlight - shade + pixelNoise;
             blockColor = mix(blockColor, blockColor * 0.46, cellBorder * 0.42);
             blockColor = mix(blockColor, blockColor * 0.34, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.34);
+            float blockGridCompensation = smoothstep(3.0, 8.0, uniforms.cellSize);
+            float blockLift = (0.04 + (0.08 * blockLum)) * blockGridCompensation;
+            blockColor += float3(blockLift);
             styledColor = clamp(blockColor, float3(0.0), float3(1.0));
         }
 
@@ -282,12 +293,15 @@ enum ShaderSource {
             float radius = mix(0.07, 0.46, smoothstep(0.02, 0.98, level));
             float dotMask = 1.0 - smoothstep(radius, radius + 0.055, distance(local, float2(0.5)));
             float inkDot = max(dotMask, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.72);
+            float halftoneGridCompensation = smoothstep(3.0, 8.0, uniforms.cellSize);
+            float halftoneLift = (0.05 + (0.08 * level)) * halftoneGridCompensation;
+            float halftoneMask = clamp(inkDot + ((1.0 - inkDot) * halftoneLift), 0.0, 1.0);
             float ring = smoothstep(radius + 0.07, radius + 0.01, distance(local, float2(0.5))) *
                          smoothstep(radius - 0.11, radius - 0.02, distance(local, float2(0.5)));
             float printTexture = (hash - 0.5) * 0.045;
             float3 papered = styledColor * (0.20 + printTexture);
             float3 inked = clamp(styledColor * (1.04 + (ring * 0.12)), float3(0.0), float3(1.0));
-            styledColor = mix(papered, inked, inkDot);
+            styledColor = mix(papered, inked, halftoneMask);
         }
 
         if (uniforms.renderMode == 3) {
@@ -303,6 +317,9 @@ enum ShaderSource {
             crtBase *= scan * phosphor * mix(0.72, 1.0, vignette);
             crtBase = mix(crtBase * 0.42, crtBase, aperture);
             crtBase += styledColor * edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.18;
+            float crtGridCompensation = smoothstep(3.0, 8.0, uniforms.cellSize);
+            float crtLift = (0.04 + (0.07 * level)) * crtGridCompensation;
+            crtBase += styledColor * crtLift;
             styledColor = clamp(crtBase, float3(0.0), float3(1.0));
         }
 
@@ -316,6 +333,9 @@ enum ShaderSource {
             mosaicColor = mix(mosaicColor * 0.48, mosaicColor, diamond);
             mosaicColor = mix(mosaicColor, mosaicColor * 0.36, tileEdge * 0.28);
             mosaicColor = mix(mosaicColor, styledColor * 1.18, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.30);
+            float mosaicGridCompensation = smoothstep(3.0, 8.0, uniforms.cellSize);
+            float mosaicLift = (0.04 + (0.08 * level)) * mosaicGridCompensation;
+            mosaicColor += float3(mosaicLift);
             styledColor = clamp(mosaicColor, float3(0.0), float3(1.0));
         }
 
