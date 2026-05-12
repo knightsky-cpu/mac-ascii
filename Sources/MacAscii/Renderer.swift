@@ -13,6 +13,7 @@ private struct Uniforms {
     var brightness: Float
     var contrast: Float
     var gamma: Float
+    var edgeStrength: Float
     var time: Float
 }
 
@@ -107,7 +108,8 @@ final class Renderer: NSObject, MTKViewDelegate {
                 "opacity=\(renderState.opacity) " +
                 "brightness=\(renderState.brightness) " +
                 "contrast=\(renderState.contrast) " +
-                "gamma=\(renderState.gamma)"
+                "gamma=\(renderState.gamma) " +
+                "edge-strength=\(renderState.edgeStrength)"
             )
             didLogRenderState = true
         }
@@ -122,6 +124,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             brightness: renderState.brightness,
             contrast: renderState.contrast,
             gamma: renderState.gamma,
+            edgeStrength: renderState.edgeStrength,
             time: Float(CFAbsoluteTimeGetCurrent() - startedAt)
         )
 

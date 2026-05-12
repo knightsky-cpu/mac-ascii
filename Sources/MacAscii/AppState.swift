@@ -33,6 +33,7 @@ final class AppState {
     static let defaultBrightness: Float = 0.0
     static let defaultContrast: Float = 1.0
     static let defaultGamma: Float = 1.0
+    static let defaultEdgeStrength: Float = 1.0
     static let brightnessCycle: [Float] = [
         0.00, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50,
         -0.50, -0.40, -0.30, -0.20, -0.10, -0.05,
@@ -44,6 +45,10 @@ final class AppState {
     static let gammaCycle: [Float] = [
         1.00, 0.90, 0.80, 0.70, 0.60, 0.50,
         1.20, 1.40, 1.60, 1.80, 2.00,
+    ]
+    static let edgeStrengthCycle: [Float] = [
+        1.00, 1.25, 1.50, 1.75, 2.00,
+        0.00, 0.25, 0.50, 0.75,
     ]
 
     private enum SettingsKey {
@@ -93,6 +98,7 @@ final class AppState {
     private(set) var brightness = AppState.defaultBrightness
     private(set) var contrast = AppState.defaultContrast
     private(set) var gamma = AppState.defaultGamma
+    private(set) var edgeStrength = AppState.defaultEdgeStrength
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -171,6 +177,18 @@ final class AppState {
         setGamma(nextCycleValue(current: gamma, values: Self.gammaCycle))
     }
 
+    func increaseEdgeStrength() {
+        setEdgeStrength(edgeStrength + 0.25)
+    }
+
+    func decreaseEdgeStrength() {
+        setEdgeStrength(edgeStrength - 0.25)
+    }
+
+    func cycleEdgeStrength() {
+        setEdgeStrength(nextCycleValue(current: edgeStrength, values: Self.edgeStrengthCycle))
+    }
+
     func setOverlayVisible(_ visible: Bool) {
         overlayVisible = visible
         save()
@@ -223,6 +241,11 @@ final class AppState {
         logState("set-gamma")
     }
 
+    func setEdgeStrength(_ value: Float) {
+        edgeStrength = min(2.0, max(0.0, value))
+        logState("set-edge-strength")
+    }
+
     private func nextCycleValue(current: Float, values: [Float]) -> Float {
         guard !values.isEmpty else {
             return current
@@ -245,6 +268,7 @@ final class AppState {
         brightness = Self.defaultBrightness
         contrast = Self.defaultContrast
         gamma = Self.defaultGamma
+        edgeStrength = Self.defaultEdgeStrength
         save()
         logState("reset-visual-defaults")
     }
@@ -256,7 +280,8 @@ final class AppState {
         opacity: Float,
         brightness: Float,
         contrast: Float,
-        gamma: Float
+        gamma: Float,
+        edgeStrength: Float
     ) {
         let cellSize = max(1.0, activeGrid.cellSize)
         let knownStyleModes = Set(visualStyles.map(\.mode))
@@ -267,8 +292,9 @@ final class AppState {
         let brightness = min(0.50, max(-0.50, self.brightness))
         let contrast = min(2.0, max(0.50, self.contrast))
         let gamma = min(2.0, max(0.50, self.gamma))
+        let edgeStrength = min(2.0, max(0.0, self.edgeStrength))
 
-        return (cellSize, styleMode, luminanceBuckets, opacity, brightness, contrast, gamma)
+        return (cellSize, styleMode, luminanceBuckets, opacity, brightness, contrast, gamma, edgeStrength)
     }
 
     private func load() {
@@ -308,7 +334,8 @@ final class AppState {
             "opacity=\(Int(overlayOpacity * 100))% " +
             "brightness=\(String(format: "%.2f", brightness)) " +
             "contrast=\(String(format: "%.2f", contrast)) " +
-            "gamma=\(String(format: "%.2f", gamma))"
+            "gamma=\(String(format: "%.2f", gamma)) " +
+            "edge=\(String(format: "%.2f", edgeStrength))"
         )
     }
 }

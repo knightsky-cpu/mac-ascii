@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var luminanceMenuItem: NSMenuItem?
     private var opacityMenuItem: NSMenuItem?
     private var toneMenuItem: NSMenuItem?
+    private var edgeMenuItem: NSMenuItem?
     private var windowLevelMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -83,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusMenu()
 
         state.logState("started")
-        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up, Ctrl+Option+B brightness, Ctrl+Option+C contrast, Ctrl+Option+G gamma")
+        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up, Ctrl+Option+B brightness, Ctrl+Option+C contrast, Ctrl+Option+G gamma, Ctrl+Option+E edge")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -205,6 +206,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let edgeDownItem = NSMenuItem(
+            title: "Edge Down",
+            action: #selector(edgeDownFromMenu),
+            keyEquivalent: ""
+        )
+        edgeDownItem.target = self
+        menu.addItem(edgeDownItem)
+
+        let edgeUpItem = NSMenuItem(
+            title: "Edge Up",
+            action: #selector(edgeUpFromMenu),
+            keyEquivalent: ""
+        )
+        edgeUpItem.target = self
+        menu.addItem(edgeUpItem)
+
+        menu.addItem(.separator())
+
         let resetItem = NSMenuItem(
             title: "Reset Visual Defaults",
             action: #selector(resetVisualDefaultsFromMenu),
@@ -235,6 +254,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toneMenuItem.isEnabled = false
         menu.addItem(toneMenuItem)
 
+        let edgeMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        edgeMenuItem.isEnabled = false
+        menu.addItem(edgeMenuItem)
+
         let windowLevelMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         windowLevelMenuItem.isEnabled = false
         menu.addItem(windowLevelMenuItem)
@@ -253,6 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.luminanceMenuItem = luminanceMenuItem
         self.opacityMenuItem = opacityMenuItem
         self.toneMenuItem = toneMenuItem
+        self.edgeMenuItem = edgeMenuItem
         self.windowLevelMenuItem = windowLevelMenuItem
         refreshStatusMenu()
     }
@@ -269,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.contrast,
             state.gamma
         )
+        edgeMenuItem?.title = String(format: "Edge: %.2f", state.edgeStrength)
         windowLevelMenuItem?.title = "Window level: \(window?.levelDescription ?? "unavailable")"
     }
 
@@ -326,6 +351,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyStateToUI()
     }
 
+    @objc private func edgeDownFromMenu() {
+        state.decreaseEdgeStrength()
+        applyStateToUI()
+    }
+
+    @objc private func edgeUpFromMenu() {
+        state.increaseEdgeStrength()
+        applyStateToUI()
+    }
+
     @objc private func resetVisualDefaultsFromMenu() {
         state.resetVisualDefaults()
         applyStateToUI()
@@ -356,6 +391,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.cycleContrast()
         case .cycleGamma:
             state.cycleGamma()
+        case .cycleEdgeStrength:
+            state.cycleEdgeStrength()
         }
         applyStateToUI()
     }
@@ -381,6 +418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "brightness=\(String(format: "%.2f", renderState.brightness)) " +
             "contrast=\(String(format: "%.2f", renderState.contrast)) " +
             "gamma=\(String(format: "%.2f", renderState.gamma)) " +
+            "edge=\(String(format: "%.2f", renderState.edgeStrength)) " +
             "window-level=\(window?.levelDescription ?? "unavailable")"
         )
     }

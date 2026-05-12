@@ -18,6 +18,7 @@ enum ShaderSource {
         float brightness;
         float contrast;
         float gamma;
+        float edgeStrength;
         float time;
     };
 
@@ -104,7 +105,20 @@ enum ShaderSource {
         float gradientX = lumRight - lumLeft;
         float gradientY = lumBottom - lumTop;
         float gradientMagnitude = length(float2(gradientX, gradientY));
-        float edgeStrength = smoothstep(0.14, 0.38, gradientMagnitude);
+        float absX = abs(gradientX);
+        float absY = abs(gradientY);
+        float majorGradient = max(absX, absY);
+        float minorGradient = min(absX, absY);
+        float gradientSum = max(0.0001, absX + absY);
+        float axisDominance = majorGradient / gradientSum;
+        float axisMargin = (majorGradient - minorGradient) / gradientSum;
+        float diagonalBalance = 1.0 - axisMargin;
+        float directionCoherence = max(
+            smoothstep(0.58, 0.78, axisDominance),
+            smoothstep(0.42, 0.62, diagonalBalance)
+        );
+        float rawEdgeStrength = smoothstep(0.14, 0.38, gradientMagnitude) * directionCoherence;
+        float edgeStrength = rawEdgeStrength * clamp(uniforms.edgeStrength, 0.0, 2.0);
 
         float edgeHorizontal = rect(local, float2(0.12, 0.70), float2(0.88, 0.86));
         float edgeVertical = rect(local, float2(0.42, 0.12), float2(0.58, 0.88));
@@ -114,8 +128,6 @@ enum ShaderSource {
         edgeBackslash *= rect(local, float2(0.08), float2(0.92));
 
         float edgeGlyph = edgeHorizontal;
-        float absX = abs(gradientX);
-        float absY = abs(gradientY);
         if (absX > absY * 1.35) edgeGlyph = edgeVertical;
         else if (absY > absX * 1.35) edgeGlyph = edgeHorizontal;
         else if (gradientX * gradientY > 0.0) edgeGlyph = edgeSlash;
@@ -125,6 +137,9 @@ enum ShaderSource {
         float aaGlyph = smoothstep(0.03, 0.90, glyph);
         float glyphStrength = mix(0.20, 0.84, smoothstep(2.0, 5.0, uniforms.cellSize));
         float asciiMask = mix(1.0, aaGlyph, glyphStrength);
+        float edgeStrokeMask = smoothstep(0.08, 0.78, edgeGlyph);
+        float edgeReplaceWeight = smoothstep(0.55, 1.10, edgeStrength);
+        asciiMask = mix(asciiMask, edgeStrokeMask, edgeReplaceWeight);
         float edgeMask = smoothstep(0.18, 0.92, edgeGlyph * edgeStrength);
         float inkAmount = clamp(0.35 + (max(level, edgeStrength) * 0.65), 0.0, 1.0);
 
