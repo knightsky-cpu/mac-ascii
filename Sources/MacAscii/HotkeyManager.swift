@@ -13,6 +13,8 @@ final class HotkeyManager {
         case cycleContrast = 8
         case cycleGamma = 9
         case cycleEdgeStrength = 10
+        case cycleRenderMode = 11
+        case cycleFrameRate = 12
     }
 
     private var hotkeys: [EventHotKeyRef?] = []
@@ -73,6 +75,8 @@ final class HotkeyManager {
         register(command: .cycleContrast, keyCode: UInt32(kVK_ANSI_C))
         register(command: .cycleGamma, keyCode: UInt32(kVK_ANSI_G))
         register(command: .cycleEdgeStrength, keyCode: UInt32(kVK_ANSI_E))
+        register(command: .cycleRenderMode, keyCode: UInt32(kVK_ANSI_M))
+        register(command: .cycleFrameRate, keyCode: UInt32(kVK_ANSI_F))
     }
 
     func stop() {

@@ -8,6 +8,7 @@ private struct Uniforms {
     var sourceSize: SIMD2<Float>
     var cellSize: Float
     var styleMode: Int32
+    var renderMode: Int32
     var luminanceBuckets: Int32
     var opacity: Float
     var brightness: Float
@@ -104,6 +105,7 @@ final class Renderer: NSObject, MTKViewDelegate {
                 "display-scale=\(displayScale) " +
                 "cell-size=\(renderState.cellSize) " +
                 "style-mode=\(renderState.styleMode) " +
+                "render-mode=\(renderState.renderMode) " +
                 "luminance-buckets=\(renderState.luminanceBuckets) " +
                 "opacity=\(renderState.opacity) " +
                 "brightness=\(renderState.brightness) " +
@@ -119,6 +121,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             sourceSize: sourceSize,
             cellSize: renderState.cellSize,
             styleMode: renderState.styleMode,
+            renderMode: renderState.renderMode,
             luminanceBuckets: renderState.luminanceBuckets,
             opacity: renderState.opacity,
             brightness: renderState.brightness,

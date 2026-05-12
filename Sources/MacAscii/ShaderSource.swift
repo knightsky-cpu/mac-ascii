@@ -13,6 +13,7 @@ enum ShaderSource {
         float2 sourceSize;
         float cellSize;
         int styleMode;
+        int renderMode;
         int luminanceBuckets;
         float opacity;
         float brightness;
@@ -234,6 +235,136 @@ enum ShaderSource {
         else if (uniforms.styleMode == 8) styledColor = blueprintColor;
         else if (uniforms.styleMode == 9) styledColor = moonColor;
         else if (uniforms.styleMode == 10) styledColor = thermalColor;
+
+        if (uniforms.renderMode == 1) {
+            float3 blockBase = floor(clamp(cellColor, float3(0.0), float3(1.0)) * 5.0 + 0.5) / 5.0;
+            float blockLum = luminance(blockBase);
+            float3 blockColor = mix(blockBase, posterColor, 0.35);
+
+            if (uniforms.styleMode == 0 || uniforms.styleMode == 5) {
+                float3 amber = mix(float3(0.16, 0.08, 0.02), float3(1.0, 0.66, 0.14), blockLum);
+                blockColor = mix(blockColor, amber, uniforms.styleMode == 0 ? 0.50 : 0.70);
+            } else if (uniforms.styleMode == 1 || uniforms.styleMode == 6) {
+                float3 phosphor = mix(float3(0.02, 0.10, 0.05), float3(0.52, 1.0, 0.36), blockLum);
+                blockColor = mix(blockColor, phosphor, 0.58);
+            } else if (uniforms.styleMode == 3) {
+                blockColor = floor((float3(1.0) - blockBase) * 5.0 + 0.5) / 5.0;
+            } else if (uniforms.styleMode == 4) {
+                blockColor = mix(blockColor * float3(0.55, 0.90, 1.18), float3(1.0, 0.12, 0.72), edgeMask * 0.45);
+            } else if (uniforms.styleMode == 7) {
+                blockColor = mix(float3(0.90, 0.84, 0.68), float3(0.20, 0.14, 0.09), blockLum);
+            } else if (uniforms.styleMode == 8) {
+                blockColor = mix(float3(0.03, 0.16, 0.34), float3(0.60, 0.88, 1.0), blockLum);
+            } else if (uniforms.styleMode == 9) {
+                blockColor = mix(float3(0.04, 0.05, 0.08), float3(0.72, 0.84, 1.0), blockLum);
+            } else if (uniforms.styleMode == 10) {
+                blockColor = thermalHot;
+            }
+
+            float leftBevel = 1.0 - smoothstep(0.06, 0.18, local.x);
+            float topBevel = 1.0 - smoothstep(0.06, 0.18, local.y);
+            float rightShade = smoothstep(0.74, 0.96, local.x);
+            float bottomShade = smoothstep(0.74, 0.96, local.y);
+            float cellBorder = max(
+                1.0 - smoothstep(0.015, 0.055, min(local.x, 1.0 - local.x)),
+                1.0 - smoothstep(0.015, 0.055, min(local.y, 1.0 - local.y))
+            );
+            float pixelNoise = (hash - 0.5) * 0.055;
+            float highlight = max(leftBevel, topBevel) * 0.14;
+            float shade = max(rightShade, bottomShade) * 0.18;
+            blockColor = blockColor + highlight - shade + pixelNoise;
+            blockColor = mix(blockColor, blockColor * 0.46, cellBorder * 0.42);
+            blockColor = mix(blockColor, blockColor * 0.34, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.34);
+            styledColor = clamp(blockColor, float3(0.0), float3(1.0));
+        }
+
+        if (uniforms.renderMode == 2) {
+            float radius = mix(0.07, 0.46, smoothstep(0.02, 0.98, level));
+            float dotMask = 1.0 - smoothstep(radius, radius + 0.055, distance(local, float2(0.5)));
+            float inkDot = max(dotMask, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.72);
+            float ring = smoothstep(radius + 0.07, radius + 0.01, distance(local, float2(0.5))) *
+                         smoothstep(radius - 0.11, radius - 0.02, distance(local, float2(0.5)));
+            float printTexture = (hash - 0.5) * 0.045;
+            float3 papered = styledColor * (0.20 + printTexture);
+            float3 inked = clamp(styledColor * (1.04 + (ring * 0.12)), float3(0.0), float3(1.0));
+            styledColor = mix(papered, inked, inkDot);
+        }
+
+        if (uniforms.renderMode == 3) {
+            float pixelColumn = floor(local.x * 3.0);
+            float redBar = 1.0 - smoothstep(0.24, 0.34, abs(local.x - 0.17));
+            float greenBar = 1.0 - smoothstep(0.24, 0.34, abs(local.x - 0.50));
+            float blueBar = 1.0 - smoothstep(0.24, 0.34, abs(local.x - 0.83));
+            float aperture = max(max(redBar, greenBar), blueBar);
+            float3 subpixel = float3(redBar, greenBar, blueBar);
+            float scan = 0.70 + (0.30 * sin((uv.y * uniforms.viewportSize.y * 3.14159) + uniforms.time * 7.0));
+            float phosphor = 0.82 + (0.18 * sin((floor(cell.x) + floor(cell.y) + uniforms.time * 10.0) * 0.55));
+            float3 crtBase = styledColor * (0.28 + (0.72 * subpixel));
+            crtBase *= scan * phosphor * mix(0.72, 1.0, vignette);
+            crtBase = mix(crtBase * 0.42, crtBase, aperture);
+            crtBase += styledColor * edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.18;
+            styledColor = clamp(crtBase, float3(0.0), float3(1.0));
+        }
+
+        if (uniforms.renderMode == 4) {
+            float2 shard = abs(local - float2(0.5));
+            float diamond = 1.0 - smoothstep(0.36, 0.58, shard.x + shard.y);
+            float tileEdge = smoothstep(0.44, 0.56, shard.x + shard.y);
+            float3 mosaicColor = floor(clamp(styledColor, float3(0.0), float3(1.0)) * 6.0 + 0.5) / 6.0;
+            float facetLight = (0.10 * (1.0 - local.y)) + ((hash - 0.5) * 0.055);
+            mosaicColor += facetLight;
+            mosaicColor = mix(mosaicColor * 0.48, mosaicColor, diamond);
+            mosaicColor = mix(mosaicColor, mosaicColor * 0.36, tileEdge * 0.28);
+            mosaicColor = mix(mosaicColor, styledColor * 1.18, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.30);
+            styledColor = clamp(mosaicColor, float3(0.0), float3(1.0));
+        }
+
+        if (uniforms.renderMode == 5) {
+            float columnHash = fract(sin(floor(cell.x) * 91.73) * 23454.21);
+            float stream = fract((uv.y * 7.0) + uniforms.time * (0.35 + columnHash * 0.75) + columnHash);
+            float head = smoothstep(0.96, 1.0, stream);
+            float trail = smoothstep(0.52, 1.0, stream) * (1.0 - head);
+            float glyphBits = step(0.55, fract(sin(dot(floor(cell) + floor(uniforms.time * 7.0), float2(12.9898, 78.233))) * 43758.5453));
+            float fineGridReadability = smoothstep(1.0, 6.0, uniforms.cellSize);
+            float trailGate = smoothstep(0.22, 0.92, level) * mix(0.24, 0.78, fineGridReadability);
+            float headMask = head * mix(0.50, 0.95, fineGridReadability);
+            float rainMask = max(headMask, trail * glyphBits * trailGate);
+            float3 rainBase = styledColor * mix(0.22, 0.08, fineGridReadability);
+            float3 rainInk = clamp(styledColor * mix(0.62, 0.90, fineGridReadability) + float3(0.02, 0.08, 0.02) * headMask, float3(0.0), float3(1.0));
+            rainInk = mix(rainInk, rainInk + float3(0.04, 0.18, 0.05), headMask * 0.45);
+            styledColor = mix(rainBase, rainInk, rainMask);
+            styledColor = mix(styledColor, styledColor + styledColor * 0.45, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.14);
+        }
+
+        if (uniforms.renderMode == 6) {
+            float3 cyberSource = floor(clamp(cellColor, float3(0.0), float3(1.0)) * 10.0 + 0.5) / 10.0;
+            float cyberLum = luminance(cyberSource);
+            float scanline = 0.88 + (0.12 * sin((uv.y * uniforms.viewportSize.y * 1.65) + uniforms.time * 10.0));
+            float sweep = smoothstep(0.028, 0.0, abs(fract((uv.y * 0.85) - uniforms.time * 0.08) - 0.5));
+            float verticalHud = 1.0 - smoothstep(0.010, 0.038, min(local.x, 1.0 - local.x));
+            float horizontalHud = 1.0 - smoothstep(0.010, 0.038, min(local.y, 1.0 - local.y));
+            float hudGrid = max(verticalHud, horizontalHud) * 0.22;
+
+            float edgeControl = clamp(uniforms.edgeStrength, 0.0, 2.0);
+            float neonEdge = smoothstep(0.18, 0.86, edgeGlyph * coherentEdgeStrength * (0.62 + edgeControl));
+            float edgeBloom = smoothstep(0.06, 0.58, edgeGlyph * coherentEdgeStrength * (0.52 + edgeControl));
+            float magentaMix = step(0.5, hash);
+            float3 neonA = float3(0.00, 0.92, 1.00);
+            float3 neonB = float3(1.00, 0.08, 0.72);
+            float3 neon = mix(neonA, neonB, magentaMix);
+
+            float3 base = pow(clamp(cyberSource, float3(0.0), float3(1.0)), float3(0.86));
+            float3 shadowTint = float3(0.012, 0.020, 0.036);
+            float3 coolTint = float3(0.58, 0.86, 1.0);
+            base = mix(shadowTint, base * coolTint, smoothstep(0.04, 0.98, cyberLum));
+            base *= 0.62 + (0.26 * scanline);
+            base *= mix(0.74, 1.0, vignette);
+            base += float3(0.0, 0.18, 0.22) * sweep;
+            base = mix(base, float3(0.0, 0.32, 0.42), hudGrid * 0.30);
+            base = mix(base, neon, neonEdge * 0.70);
+            base += neon * edgeBloom * 0.18;
+            styledColor = clamp(base, float3(0.0), float3(1.0));
+        }
 
         return float4(styledColor, clamp(uniforms.opacity, 0.10, 1.0));
     }

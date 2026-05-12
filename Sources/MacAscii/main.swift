@@ -4,6 +4,7 @@ import MetalKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = AppState()
+    private var metalView: MTKView?
     private var window: OverlayWindow?
     private var renderer: Renderer?
     private var captureManager: ScreenCaptureManager?
@@ -12,7 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toggleMenuItem: NSMenuItem?
     private var gridMenuItem: NSMenuItem?
     private var styleMenuItem: NSMenuItem?
+    private var renderModeMenuItem: NSMenuItem?
     private var luminanceMenuItem: NSMenuItem?
+    private var frameRateMenuItem: NSMenuItem?
     private var opacityMenuItem: NSMenuItem?
     private var toneMenuItem: NSMenuItem?
     private var edgeMenuItem: NSMenuItem?
@@ -33,16 +36,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let maximumFPS = screen.maximumFramesPerSecond
+        state.configureSupportedFrameRates(maximumFPS: maximumFPS)
+
         let metalView = MTKView(frame: screen.frame, device: device)
         metalView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         metalView.colorPixelFormat = .bgra8Unorm
         metalView.framebufferOnly = true
         metalView.isPaused = false
         metalView.enableSetNeedsDisplay = false
-        metalView.preferredFramesPerSecond = 30
+        metalView.preferredFramesPerSecond = state.frameRate
+        self.metalView = metalView
         print(
             "MacAscii: screen frame=\(Int(screen.frame.width))x\(Int(screen.frame.height)) " +
-            "scale=\(screen.backingScaleFactor)"
+            "scale=\(screen.backingScaleFactor) " +
+            "max-fps=\(maximumFPS)"
         )
 
         guard let renderer = Renderer(
@@ -84,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusMenu()
 
         state.logState("started")
-        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up, Ctrl+Option+B brightness, Ctrl+Option+C contrast, Ctrl+Option+G gamma, Ctrl+Option+E edge")
+        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+M render mode, Ctrl+Option+F fps, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up, Ctrl+Option+B brightness, Ctrl+Option+C contrast, Ctrl+Option+G gamma, Ctrl+Option+E edge")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -130,6 +138,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cycleStyleItem.target = self
         menu.addItem(cycleStyleItem)
 
+        let cycleRenderModeItem = NSMenuItem(
+            title: "Cycle Render Mode",
+            action: #selector(cycleRenderModeFromMenu),
+            keyEquivalent: ""
+        )
+        cycleRenderModeItem.target = self
+        menu.addItem(cycleRenderModeItem)
+
         let toggleLuminanceItem = NSMenuItem(
             title: "Toggle 10/20 Luminance",
             action: #selector(toggleLuminanceFromMenu),
@@ -137,6 +153,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         toggleLuminanceItem.target = self
         menu.addItem(toggleLuminanceItem)
+
+        let cycleFrameRateItem = NSMenuItem(
+            title: "Cycle FPS",
+            action: #selector(cycleFrameRateFromMenu),
+            keyEquivalent: ""
+        )
+        cycleFrameRateItem.target = self
+        menu.addItem(cycleFrameRateItem)
 
         let opacityDownItem = NSMenuItem(
             title: "Opacity Down",
@@ -242,9 +266,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         styleMenuItem.isEnabled = false
         menu.addItem(styleMenuItem)
 
+        let renderModeMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        renderModeMenuItem.isEnabled = false
+        menu.addItem(renderModeMenuItem)
+
         let luminanceMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         luminanceMenuItem.isEnabled = false
         menu.addItem(luminanceMenuItem)
+
+        let frameRateMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        frameRateMenuItem.isEnabled = false
+        menu.addItem(frameRateMenuItem)
 
         let opacityMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         opacityMenuItem.isEnabled = false
@@ -273,7 +305,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.toggleMenuItem = toggleMenuItem
         self.gridMenuItem = gridMenuItem
         self.styleMenuItem = styleMenuItem
+        self.renderModeMenuItem = renderModeMenuItem
         self.luminanceMenuItem = luminanceMenuItem
+        self.frameRateMenuItem = frameRateMenuItem
         self.opacityMenuItem = opacityMenuItem
         self.toneMenuItem = toneMenuItem
         self.edgeMenuItem = edgeMenuItem
@@ -285,7 +319,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleMenuItem?.title = state.overlayVisible ? "Hide Overlay" : "Show Overlay"
         gridMenuItem?.title = "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))"
         styleMenuItem?.title = "Style: \(state.activeStyle.name)"
+        renderModeMenuItem?.title = "Render: \(state.renderMode.name)"
         luminanceMenuItem?.title = "Luminance: \(state.luminanceMode.bucketCount) buckets"
+        frameRateMenuItem?.title = "FPS: \(state.frameRate)"
         opacityMenuItem?.title = "Opacity: \(Int(state.overlayOpacity * 100))%"
         toneMenuItem?.title = String(
             format: "Tone: B %.2f  C %.2f  G %.2f",
@@ -309,8 +345,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handle(command: .cycleStyle)
     }
 
+    @objc private func cycleRenderModeFromMenu() {
+        handle(command: .cycleRenderMode)
+    }
+
     @objc private func toggleLuminanceFromMenu() {
         handle(command: .toggleLuminance)
+    }
+
+    @objc private func cycleFrameRateFromMenu() {
+        handle(command: .cycleFrameRate)
     }
 
     @objc private func opacityDownFromMenu() {
@@ -323,47 +367,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func brightnessDownFromMenu() {
         state.decreaseBrightness()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Brightness: %.2f", state.brightness))
     }
 
     @objc private func brightnessUpFromMenu() {
         state.increaseBrightness()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Brightness: %.2f", state.brightness))
     }
 
     @objc private func contrastDownFromMenu() {
         state.decreaseContrast()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Contrast: %.2f", state.contrast))
     }
 
     @objc private func contrastUpFromMenu() {
         state.increaseContrast()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Contrast: %.2f", state.contrast))
     }
 
     @objc private func gammaDownFromMenu() {
         state.decreaseGamma()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Gamma: %.2f", state.gamma))
     }
 
     @objc private func gammaUpFromMenu() {
         state.increaseGamma()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Gamma: %.2f", state.gamma))
     }
 
     @objc private func edgeDownFromMenu() {
         state.decreaseEdgeStrength()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Edge: %.2f", state.edgeStrength))
     }
 
     @objc private func edgeUpFromMenu() {
         state.increaseEdgeStrength()
-        applyStateToUI()
+        finishStateChange(hudMessage: String(format: "Edge: %.2f", state.edgeStrength))
     }
 
     @objc private func resetVisualDefaultsFromMenu() {
         state.resetVisualDefaults()
-        applyStateToUI()
+        finishStateChange(hudMessage: "Reset visual defaults")
         logAppRenderState(reason: "reset-menu")
     }
 
@@ -379,8 +423,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.cycleGrid()
         case .cycleStyle:
             state.cycleStyle()
+        case .cycleRenderMode:
+            state.cycleRenderMode()
         case .toggleLuminance:
             state.toggleLuminanceMode()
+        case .cycleFrameRate:
+            state.cycleFrameRate()
         case .decreaseOpacity:
             state.decreaseOpacity()
         case .increaseOpacity:
@@ -394,16 +442,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .cycleEdgeStrength:
             state.cycleEdgeStrength()
         }
-        applyStateToUI()
+        finishStateChange(hudMessage: hudMessage(for: command))
     }
 
     private func applyStateToUI() {
+        metalView?.preferredFramesPerSecond = state.frameRate
         if state.overlayVisible {
             window?.orderFrontRegardless()
         } else {
             window?.orderOut(nil)
         }
         refreshStatusMenu()
+    }
+
+    private func finishStateChange(hudMessage: String?) {
+        applyStateToUI()
+        if let hudMessage, state.overlayVisible {
+            window?.showHUD(hudMessage)
+        }
+    }
+
+    private func hudMessage(for command: HotkeyManager.Command) -> String {
+        switch command {
+        case .toggleOverlay:
+            return state.overlayVisible ? "Overlay: shown" : "Overlay: hidden"
+        case .cycleGrid:
+            return "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))"
+        case .cycleStyle:
+            return "Style: \(state.activeStyle.name)"
+        case .cycleRenderMode:
+            return "Render: \(state.renderMode.name)"
+        case .toggleLuminance:
+            return "Luminance: \(state.luminanceMode.bucketCount) buckets"
+        case .cycleFrameRate:
+            return "FPS: \(state.frameRate)"
+        case .decreaseOpacity, .increaseOpacity:
+            return "Opacity: \(Int(state.overlayOpacity * 100))%"
+        case .cycleBrightness:
+            return String(format: "Brightness: %.2f", state.brightness)
+        case .cycleContrast:
+            return String(format: "Contrast: %.2f", state.contrast)
+        case .cycleGamma:
+            return String(format: "Gamma: %.2f", state.gamma)
+        case .cycleEdgeStrength:
+            return String(format: "Edge: %.2f", state.edgeStrength)
+        }
     }
 
     private func logAppRenderState(reason: String) {
@@ -413,7 +496,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "visible=\(state.overlayVisible) " +
             "grid=\(state.activeGrid.name) cell-size=\(renderState.cellSize) " +
             "style=\(state.activeStyle.name) style-mode=\(renderState.styleMode) " +
+            "render-mode=\(state.renderMode.name) " +
             "luminance-buckets=\(renderState.luminanceBuckets) " +
+            "fps=\(state.frameRate) " +
             "opacity=\(Int(renderState.opacity * 100))% " +
             "brightness=\(String(format: "%.2f", renderState.brightness)) " +
             "contrast=\(String(format: "%.2f", renderState.contrast)) " +

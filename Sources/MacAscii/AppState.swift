@@ -14,6 +14,54 @@ enum LuminanceMode: String, CaseIterable {
     }
 }
 
+enum RenderMode: String, CaseIterable {
+    case ascii
+    case blockyRetro
+    case halftone
+    case crtPixel
+    case mosaic
+    case matrixRain
+    case cyberpunk
+
+    var name: String {
+        switch self {
+        case .ascii:
+            return "ascii"
+        case .blockyRetro:
+            return "blocky-retro"
+        case .halftone:
+            return "halftone"
+        case .crtPixel:
+            return "crt-pixel"
+        case .mosaic:
+            return "mosaic"
+        case .matrixRain:
+            return "matrix-rain"
+        case .cyberpunk:
+            return "cyberpunk"
+        }
+    }
+
+    var mode: Int32 {
+        switch self {
+        case .ascii:
+            return 0
+        case .blockyRetro:
+            return 1
+        case .halftone:
+            return 2
+        case .crtPixel:
+            return 3
+        case .mosaic:
+            return 4
+        case .matrixRain:
+            return 5
+        case .cyberpunk:
+            return 6
+        }
+    }
+}
+
 struct GridPreset {
     let name: String
     let cellSize: Float
@@ -27,7 +75,9 @@ struct VisualStyle {
 final class AppState {
     static let defaultGridName = "micro-ascii"
     static let defaultStyleName = "classic-amber"
+    static let defaultRenderMode: RenderMode = .ascii
     static let defaultLuminanceMode: LuminanceMode = .classic10
+    static let defaultFrameRate = 30
     static let defaultOverlayVisible = true
     static let defaultOverlayOpacity: Float = 0.90
     static let defaultBrightness: Float = 0.0
@@ -43,7 +93,7 @@ final class AppState {
         0.50, 0.65, 0.80, 0.90,
     ]
     static let gammaCycle: [Float] = [
-        1.00, 0.90, 0.80, 0.70, 0.60, 0.50,
+        0.50, 0.60, 0.70, 0.80, 0.90, 1.00,
         1.20, 1.40, 1.60, 1.80, 2.00,
     ]
     static let edgeStrengthCycle: [Float] = [
@@ -59,6 +109,7 @@ final class AppState {
     }
 
     private let defaults: UserDefaults
+    private(set) var supportedFrameRates = [15, 30, 60]
 
     let gridPresets = [
         GridPreset(name: "pixel-ascii", cellSize: 1),
@@ -92,7 +143,9 @@ final class AppState {
 
     private(set) var gridIndex = 3
     private(set) var styleIndex = 0
+    private(set) var renderMode: RenderMode = .ascii
     private(set) var luminanceMode: LuminanceMode = .classic10
+    private(set) var frameRate = AppState.defaultFrameRate
     private(set) var overlayVisible = true
     private(set) var overlayOpacity = AppState.defaultOverlayOpacity
     private(set) var brightness = AppState.defaultBrightness
@@ -129,8 +182,31 @@ final class AppState {
         setStyleIndex((styleIndex + 1) % visualStyles.count)
     }
 
+    func cycleRenderMode() {
+        let modes = RenderMode.allCases
+        let index = modes.firstIndex(of: renderMode) ?? 0
+        setRenderMode(modes[(index + 1) % modes.count])
+    }
+
     func toggleLuminanceMode() {
         setLuminanceMode(luminanceMode == .classic10 ? .fine20 : .classic10)
+    }
+
+    func configureSupportedFrameRates(maximumFPS: Int) {
+        let cappedMaximum = max(15, maximumFPS)
+        var rates = [15, 30, 60].filter { $0 <= cappedMaximum }
+        if cappedMaximum >= 120 {
+            rates.append(120)
+        }
+        supportedFrameRates = rates.isEmpty ? [15] : rates
+        if !supportedFrameRates.contains(frameRate) {
+            frameRate = supportedFrameRates.contains(Self.defaultFrameRate) ? Self.defaultFrameRate : supportedFrameRates[0]
+        }
+        logState("configure-fps")
+    }
+
+    func cycleFrameRate() {
+        setFrameRate(nextCycleValue(current: frameRate, values: supportedFrameRates))
     }
 
     func increaseOpacity() {
@@ -221,6 +297,19 @@ final class AppState {
         logState("set-luminance")
     }
 
+    func setFrameRate(_ fps: Int) {
+        guard supportedFrameRates.contains(fps) else {
+            return
+        }
+        frameRate = fps
+        logState("set-fps")
+    }
+
+    func setRenderMode(_ mode: RenderMode) {
+        renderMode = mode
+        logState("set-render-mode")
+    }
+
     func setOverlayOpacity(_ opacity: Float) {
         overlayOpacity = min(1.0, max(0.10, opacity))
         logState("set-opacity")
@@ -259,11 +348,25 @@ final class AppState {
         return values[0]
     }
 
+    private func nextCycleValue(current: Int, values: [Int]) -> Int {
+        guard !values.isEmpty else {
+            return current
+        }
+
+        if let index = values.firstIndex(of: current) {
+            return values[(index + 1) % values.count]
+        }
+
+        return values[0]
+    }
+
     func resetVisualDefaults() {
         overlayVisible = Self.defaultOverlayVisible
         gridIndex = gridPresets.firstIndex { $0.name == Self.defaultGridName } ?? 3
         styleIndex = visualStyles.firstIndex { $0.name == Self.defaultStyleName } ?? 0
+        renderMode = Self.defaultRenderMode
         luminanceMode = Self.defaultLuminanceMode
+        frameRate = supportedFrameRates.contains(Self.defaultFrameRate) ? Self.defaultFrameRate : supportedFrameRates[0]
         overlayOpacity = Self.defaultOverlayOpacity
         brightness = Self.defaultBrightness
         contrast = Self.defaultContrast
@@ -276,6 +379,7 @@ final class AppState {
     func sanitizedRenderState() -> (
         cellSize: Float,
         styleMode: Int32,
+        renderMode: Int32,
         luminanceBuckets: Int32,
         opacity: Float,
         brightness: Float,
@@ -286,6 +390,7 @@ final class AppState {
         let cellSize = max(1.0, activeGrid.cellSize)
         let knownStyleModes = Set(visualStyles.map(\.mode))
         let styleMode = knownStyleModes.contains(activeStyle.mode) ? activeStyle.mode : 0
+        let renderMode = RenderMode.allCases.contains(self.renderMode) ? self.renderMode.mode : 0
         let buckets = luminanceMode.bucketCount
         let luminanceBuckets = (buckets == 10 || buckets == 20) ? Int32(buckets) : 10
         let opacity = min(1.0, max(0.10, overlayOpacity))
@@ -294,7 +399,7 @@ final class AppState {
         let gamma = min(2.0, max(0.50, self.gamma))
         let edgeStrength = min(2.0, max(0.0, self.edgeStrength))
 
-        return (cellSize, styleMode, luminanceBuckets, opacity, brightness, contrast, gamma, edgeStrength)
+        return (cellSize, styleMode, renderMode, luminanceBuckets, opacity, brightness, contrast, gamma, edgeStrength)
     }
 
     private func load() {
@@ -330,7 +435,9 @@ final class AppState {
             "MacAscii: \(reason) visible=\(overlayVisible) " +
             "grid=\(activeGrid.name) cell-size=\(activeGrid.cellSize) " +
             "style=\(activeStyle.name) style-mode=\(activeStyle.mode) " +
+            "render-mode=\(renderMode.name) " +
             "luminance-buckets=\(luminanceMode.bucketCount) " +
+            "fps=\(frameRate) " +
             "opacity=\(Int(overlayOpacity * 100))% " +
             "brightness=\(String(format: "%.2f", brightness)) " +
             "contrast=\(String(format: "%.2f", contrast)) " +
