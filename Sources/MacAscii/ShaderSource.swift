@@ -128,20 +128,29 @@ enum ShaderSource {
         edgeBackslash *= rect(local, float2(0.08), float2(0.92));
 
         float edgeGlyph = edgeHorizontal;
-        if (absX > absY * 1.35) edgeGlyph = edgeVertical;
-        else if (absY > absX * 1.35) edgeGlyph = edgeHorizontal;
-        else if (gradientX * gradientY > 0.0) edgeGlyph = edgeSlash;
-        else edgeGlyph = edgeBackslash;
+        float diagonalEdge = 0.0;
+        if (absX > absY * 1.40) edgeGlyph = edgeVertical;
+        else if (absY > absX * 1.40) edgeGlyph = edgeHorizontal;
+        else {
+            diagonalEdge = 1.0;
+            if (gradientX * gradientY > 0.0) edgeGlyph = edgeSlash;
+            else edgeGlyph = edgeBackslash;
+        }
 
         float glyph = glyphMask(glyphBucket, local);
         float aaGlyph = smoothstep(0.03, 0.90, glyph);
         float glyphStrength = mix(0.20, 0.84, smoothstep(2.0, 5.0, uniforms.cellSize));
         float asciiMask = mix(1.0, aaGlyph, glyphStrength);
-        float edgeStrokeMask = smoothstep(0.08, 0.78, edgeGlyph);
-        float edgeReplaceWeight = smoothstep(0.55, 1.10, edgeStrength);
+        float edgeStrokeMask = smoothstep(0.12, 0.84, edgeGlyph);
+        float coherentEdgeStrength = edgeStrength * mix(0.90, 1.16, directionCoherence);
+        float edgeReplaceWeight = smoothstep(
+            mix(0.58, 0.68, diagonalEdge),
+            mix(1.05, 1.16, diagonalEdge),
+            coherentEdgeStrength
+        );
         asciiMask = mix(asciiMask, edgeStrokeMask, edgeReplaceWeight);
-        float edgeMask = smoothstep(0.18, 0.92, edgeGlyph * edgeStrength);
-        float inkAmount = clamp(0.35 + (max(level, edgeStrength) * 0.65), 0.0, 1.0);
+        float edgeMask = smoothstep(0.20, 0.88, edgeGlyph * coherentEdgeStrength);
+        float inkAmount = clamp(0.35 + (max(level, coherentEdgeStrength) * 0.65), 0.0, 1.0);
 
         float3 posterColor = floor((pow(clamp(cellColor, float3(0.0), float3(1.0)), float3(0.9)) * 9.0) + 0.5) / 9.0;
         float grayValue = luminance(posterColor);
