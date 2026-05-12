@@ -30,9 +30,13 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var startedAt = CFAbsoluteTimeGetCurrent()
     private var didLogRenderState = false
 
-    init?(metalView: MTKView, state: AppState, displayScale: CGFloat) {
-        guard let device = metalView.device,
-              let commandQueue = device.makeCommandQueue() else {
+    init?(
+        device: MTLDevice,
+        colorPixelFormat: MTLPixelFormat,
+        state: AppState,
+        displayScale: CGFloat
+    ) {
+        guard let commandQueue = device.makeCommandQueue() else {
             return nil
         }
 
@@ -47,7 +51,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             let descriptor = MTLRenderPipelineDescriptor()
             descriptor.vertexFunction = library.makeFunction(name: "vertex_main")
             descriptor.fragmentFunction = library.makeFunction(name: "fragment_ascii")
-            descriptor.colorAttachments[0].pixelFormat = metalView.colorPixelFormat
+            descriptor.colorAttachments[0].pixelFormat = colorPixelFormat
             descriptor.colorAttachments[0].isBlendingEnabled = true
             descriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
             descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha

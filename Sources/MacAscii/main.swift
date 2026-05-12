@@ -54,7 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard let renderer = Renderer(
-            metalView: metalView,
+            device: device,
+            colorPixelFormat: metalView.colorPixelFormat,
             state: state,
             displayScale: screen.backingScaleFactor
         ) else {
