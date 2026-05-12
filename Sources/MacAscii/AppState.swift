@@ -73,7 +73,7 @@ struct VisualStyle {
 }
 
 final class AppState {
-    static let defaultGridName = "micro-ascii"
+    static let defaultGridName = "pixel-ascii"
     static let defaultStyleName = "classic-amber"
     static let defaultRenderMode: RenderMode = .ascii
     static let defaultLuminanceMode: LuminanceMode = .classic10
@@ -83,7 +83,7 @@ final class AppState {
     static let defaultBrightness: Float = 0.0
     static let defaultContrast: Float = 1.0
     static let defaultGamma: Float = 1.0
-    static let defaultEdgeStrength: Float = 1.0
+    static let defaultEdgeStrength: Float = 0.0
     static let brightnessCycle: [Float] = [
         0.00, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50,
         -0.50, -0.40, -0.30, -0.20, -0.10, -0.05,
@@ -141,7 +141,7 @@ final class AppState {
         VisualStyle(name: "thermal-edge", mode: 10),
     ]
 
-    private(set) var gridIndex = 3
+    private(set) var gridIndex = 0
     private(set) var styleIndex = 0
     private(set) var renderMode: RenderMode = .ascii
     private(set) var luminanceMode: LuminanceMode = .classic10

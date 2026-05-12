@@ -160,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let gridSelectionMenu = NSMenu(title: "Select Grid")
         for (index, preset) in state.gridPresets.enumerated() {
             let item = NSMenuItem(
-                title: "\(preset.name) (\(Int(preset.cellSize)))",
+                title: "\(preset.name) (\(gridCellSizeLabel(for: preset.cellSize)))",
                 action: #selector(selectGridFromMenu(_:)),
                 keyEquivalent: ""
             )
@@ -475,7 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshStatusMenu() {
         toggleMenuItem?.title = state.overlayVisible ? "Hide Overlay" : "Show Overlay"
-        gridMenuItem?.title = "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))"
+        gridMenuItem?.title = "Grid: \(state.activeGrid.name) (\(gridCellSizeLabel(for: state.activeGrid.cellSize)))"
         styleMenuItem?.title = "Style: \(state.activeStyle.name)"
         renderModeMenuItem?.title = "Render: \(state.renderMode.name)"
         luminanceMenuItem?.title = "Luminance: \(state.luminanceMode.bucketCount) buckets"
@@ -502,7 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func selectGridFromMenu(_ sender: NSMenuItem) {
         state.setGridIndex(sender.tag)
-        finishStateChange(hudMessage: "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))")
+        finishStateChange(hudMessage: "Grid: \(state.activeGrid.name) (\(gridCellSizeLabel(for: state.activeGrid.cellSize)))")
     }
 
     @objc private func cycleStyleFromMenu() {
@@ -727,7 +727,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .toggleOverlay:
             return state.overlayVisible ? "Overlay: shown" : "Overlay: hidden"
         case .cycleGrid:
-            return "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))"
+            return "Grid: \(state.activeGrid.name) (\(gridCellSizeLabel(for: state.activeGrid.cellSize)))"
         case .cycleStyle:
             return "Style: \(state.activeStyle.name)"
         case .cycleRenderMode:
@@ -784,6 +784,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let value = (item.representedObject as? NSNumber)?.floatValue ?? .greatestFiniteMagnitude
             item.state = abs(value - currentValue) < 0.001 ? .on : .off
         }
+    }
+
+    private func gridCellSizeLabel(for cellSize: Float) -> String {
+        if abs(cellSize.rounded() - cellSize) < 0.001 {
+            return String(Int(cellSize.rounded()))
+        }
+        return String(format: "%.1f", cellSize)
     }
 }
 

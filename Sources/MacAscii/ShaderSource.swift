@@ -167,70 +167,76 @@ enum ShaderSource {
         float2 centeredUv = uv - float2(0.5);
         float vignette = smoothstep(0.78, 0.18, dot(centeredUv, centeredUv));
 
-        float3 classicShadow = float3(0.12, 0.065, 0.018);
-        float3 classicAmber = float3(1.0, 0.72, 0.18);
-        float3 classicColor = mix(classicShadow, mix(classicShadow, classicAmber, inkAmount), styleMask);
+        float3 classicShadow = float3(0.065, 0.032, 0.008);
+        float3 classicAmber = float3(0.96, 0.62, 0.12);
+        float3 classicTone = mix(classicShadow, classicAmber, pow(inkAmount, 0.94));
+        float3 classicColor = mix(classicShadow, classicTone, styleMask);
 
-        float3 darkShadow = float3(0.030, 0.014, 0.003);
-        float3 darkAmber = float3(0.78, 0.36, 0.055);
-        float3 darkColor = mix(darkShadow, mix(darkShadow, darkAmber, inkAmount), styleMask);
-        darkColor = mix(darkColor, darkColor + float3(0.12, 0.045, 0.006), edgeMask * 0.45);
+        float3 darkShadow = float3(0.016, 0.007, 0.0015);
+        float3 darkAmber = float3(0.62, 0.25, 0.030);
+        float3 darkTone = mix(darkShadow, darkAmber, pow(inkAmount, 1.06));
+        float3 darkColor = mix(darkShadow, darkTone, styleMask);
+        darkColor = mix(darkColor, darkColor + float3(0.06, 0.020, 0.002), edgeMask * 0.30);
 
-        float3 crtPalette = mix(gray, posterColor, 0.62);
-        crtPalette = pow(clamp(crtPalette * 1.12, float3(0.0), float3(1.0)), float3(0.86));
-        crtPalette *= mix(float3(0.80, 0.96, 1.16), float3(1.20, 1.02, 0.80), level);
-        float3 crtColor = mix(float3(0.018, 0.030, 0.045), mix(float3(0.018, 0.030, 0.045), crtPalette, inkAmount), styleMask);
-        crtColor *= mix(0.74, 1.0, vignette);
+        float3 crtPalette = mix(gray, posterColor, 0.54);
+        crtPalette = pow(clamp(crtPalette * 1.04, float3(0.0), float3(1.0)), float3(0.92));
+        crtPalette *= mix(float3(0.76, 0.90, 1.06), float3(1.08, 0.98, 0.82), level);
+        float3 crtBase = float3(0.012, 0.020, 0.032);
+        float3 crtColor = mix(crtBase, mix(crtBase, crtPalette, inkAmount), styleMask);
+        crtColor *= mix(0.80, 1.0, vignette);
 
         float hash = fract(sin(dot(floor(cell), float2(127.1, 311.7))) * 43758.5453);
-        float3 hybridEdge = mix(float3(1.0, 0.78, 0.42), float3(1.0, 0.38, 0.82), step(0.5, hash));
-        float3 hybridBase = mix(gray, posterColor, 0.78) * float3(0.96, 1.02, 1.08);
-        float3 hybridColor = mix(float3(0.018, 0.022, 0.030), mix(float3(0.018, 0.022, 0.030), hybridBase, inkAmount), styleMask);
-        hybridColor = mix(hybridColor, hybridEdge, edgeMask * 0.55);
+        float3 hybridEdge = mix(float3(1.0, 0.74, 0.36), float3(0.94, 0.30, 0.72), step(0.5, hash));
+        float3 hybridBase = mix(gray, posterColor, 0.70) * float3(0.90, 0.96, 1.00);
+        float3 hybridShadow = float3(0.012, 0.016, 0.024);
+        float3 hybridColor = mix(hybridShadow, mix(hybridShadow, hybridBase, inkAmount), styleMask);
+        hybridColor = mix(hybridColor, hybridEdge, edgeMask * 0.42);
 
-        float3 invertColor = mix(float3(0.02, 0.02, 0.025), pow(float3(1.0) - posterColor, float3(0.92)), inkAmount);
-        invertColor = mix(float3(0.02, 0.02, 0.025), invertColor, styleMask);
+        float3 invertBase = float3(0.014, 0.014, 0.018);
+        float3 invertTone = mix(invertBase, pow(float3(1.0) - posterColor, float3(0.98)), inkAmount);
+        float3 invertColor = mix(invertBase, invertTone, styleMask);
 
-        float3 cyberBase = mix(gray, posterColor, 0.52) * float3(0.65, 0.92, 1.28);
+        float3 cyberBase = mix(gray, posterColor, 0.42) * float3(0.52, 0.82, 1.10);
         float3 cyberGlow = mix(float3(1.0, 0.12, 0.72), float3(0.72, 0.18, 1.0), step(0.46, hash));
-        float3 cyberColor = mix(float3(0.025, 0.010, 0.050), mix(float3(0.025, 0.010, 0.050), cyberBase, inkAmount), styleMask);
-        cyberColor = mix(cyberColor, cyberGlow, edgeMask * 0.65);
-        cyberColor *= mix(0.76, 1.0, vignette);
+        float3 cyberShadow = float3(0.015, 0.006, 0.032);
+        float3 cyberColor = mix(cyberShadow, mix(cyberShadow, cyberBase, inkAmount), styleMask);
+        cyberColor = mix(cyberColor, cyberGlow, edgeMask * 0.42);
+        cyberColor *= mix(0.82, 1.0, vignette);
 
-        float3 phosphorShadow = float3(0.002, 0.020, 0.010);
-        float3 phosphorInk = mix(float3(0.12, 0.42, 0.18), float3(0.72, 1.00, 0.50), level);
+        float3 phosphorShadow = float3(0.001, 0.012, 0.006);
+        float3 phosphorInk = mix(float3(0.08, 0.30, 0.14), float3(0.58, 0.88, 0.42), level);
         float scanline = 0.88 + (0.12 * sin((uv.y * uniforms.viewportSize.y * 3.14159) + uniforms.time * 8.0));
         float3 phosphorColor = mix(phosphorShadow, mix(phosphorShadow, phosphorInk, inkAmount), styleMask);
-        phosphorColor = mix(phosphorColor, phosphorColor + float3(0.10, 0.28, 0.08), edgeMask * 0.45);
-        phosphorColor *= scanline * mix(0.76, 1.0, vignette);
+        phosphorColor = mix(phosphorColor, phosphorColor + float3(0.06, 0.16, 0.05), edgeMask * 0.34);
+        phosphorColor *= scanline * mix(0.84, 1.0, vignette);
 
-        float3 paperBase = float3(0.94, 0.91, 0.82);
-        float3 paperFiber = paperBase + ((hash - 0.5) * float3(0.035, 0.030, 0.018));
-        float3 inkTone = mix(float3(0.30, 0.22, 0.14), float3(0.035, 0.030, 0.024), inkAmount);
+        float3 paperBase = float3(0.90, 0.87, 0.78);
+        float3 paperFiber = paperBase + ((hash - 0.5) * float3(0.028, 0.024, 0.014));
+        float3 inkTone = mix(float3(0.26, 0.19, 0.12), float3(0.028, 0.024, 0.020), inkAmount);
         float3 paperColor = mix(paperFiber, inkTone, clamp(styleMask * inkAmount, 0.0, 1.0));
-        paperColor = mix(paperColor, float3(0.08, 0.055, 0.030), edgeMask * 0.70);
+        paperColor = mix(paperColor, float3(0.06, 0.040, 0.022), edgeMask * 0.56);
 
-        float3 blueprintBase = float3(0.012, 0.060, 0.140);
-        float3 blueprintInk = mix(float3(0.20, 0.52, 0.92), float3(0.86, 0.96, 1.00), inkAmount);
+        float3 blueprintBase = float3(0.008, 0.042, 0.104);
+        float3 blueprintInk = mix(float3(0.16, 0.42, 0.80), float3(0.78, 0.90, 0.98), inkAmount);
         float blueprintGrid = max(
             1.0 - smoothstep(0.015, 0.045, min(local.x, 1.0 - local.x)),
             1.0 - smoothstep(0.015, 0.045, min(local.y, 1.0 - local.y))
         );
         float3 blueprintColor = mix(blueprintBase, blueprintInk, styleMask);
-        blueprintColor = mix(blueprintColor, float3(0.45, 0.76, 1.0), blueprintGrid * 0.18);
-        blueprintColor = mix(blueprintColor, float3(1.0, 0.95, 0.65), edgeMask * 0.42);
+        blueprintColor = mix(blueprintColor, float3(0.34, 0.62, 0.92), blueprintGrid * 0.12);
+        blueprintColor = mix(blueprintColor, float3(0.94, 0.92, 0.70), edgeMask * 0.30);
 
-        float3 moonBase = float3(0.012, 0.014, 0.018);
-        float3 moonInk = mix(float3(0.18, 0.22, 0.28), float3(0.86, 0.92, 1.0), inkAmount);
+        float3 moonBase = float3(0.008, 0.010, 0.014);
+        float3 moonInk = mix(float3(0.14, 0.18, 0.24), float3(0.78, 0.86, 0.96), inkAmount);
         float3 moonColor = mix(moonBase, moonInk, styleMask);
-        moonColor = mix(moonColor, float3(0.62, 0.82, 1.0), edgeMask * 0.48);
-        moonColor *= mix(0.70, 1.0, vignette);
+        moonColor = mix(moonColor, float3(0.54, 0.72, 0.96), edgeMask * 0.34);
+        moonColor *= mix(0.80, 1.0, vignette);
 
         float3 thermalCold = float3(0.020, 0.020, 0.070);
         float3 thermalMid = mix(float3(0.05, 0.26, 0.75), float3(0.95, 0.36, 0.10), smoothstep(0.20, 0.78, level));
         float3 thermalHot = mix(thermalMid, float3(1.0, 0.92, 0.30), smoothstep(0.78, 1.0, level));
         float3 thermalColor = mix(thermalCold, thermalHot, styleMask * inkAmount);
-        thermalColor = mix(thermalColor, float3(0.05, 1.0, 0.82), edgeMask * 0.62);
+        thermalColor = mix(thermalColor, float3(0.05, 0.92, 0.78), edgeMask * 0.44);
 
         float3 styledColor = classicColor;
         if (uniforms.styleMode == 1) styledColor = crtColor;
