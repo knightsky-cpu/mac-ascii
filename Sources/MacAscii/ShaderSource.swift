@@ -355,11 +355,22 @@ enum ShaderSource {
             float trailGate = smoothstep(0.22, 0.92, level) * mix(0.24, 0.78, fineGridReadability);
             float headMask = head * mix(0.50, 0.95, fineGridReadability);
             float rainMask = max(headMask, trail * glyphBits * trailGate);
-            float3 rainBase = styledColor * mix(0.22, 0.08, fineGridReadability);
-            float3 rainInk = clamp(styledColor * mix(0.62, 0.90, fineGridReadability) + float3(0.02, 0.08, 0.02) * headMask, float3(0.0), float3(1.0));
-            rainInk = mix(rainInk, rainInk + float3(0.04, 0.18, 0.05), headMask * 0.45);
+            float3 rainSource = pow(clamp(cellColor, float3(0.0), float3(1.0)), float3(0.72));
+            rainSource = clamp(((rainSource + 0.10) - 0.5) * 2.00 + 0.5, float3(0.0), float3(1.0));
+            float3 rainBase = rainSource * mix(0.62, 0.46, fineGridReadability);
+            rainBase += rainSource * (0.12 + (0.08 * fineGridReadability));
+            float3 rainNeonA = float3(0.00, 0.88, 1.00);
+            float3 rainNeonB = float3(1.00, 0.14, 0.74);
+            float3 rainParticle = mix(rainNeonA, rainNeonB, step(0.5, columnHash));
+            float particleGlow = max(headMask, trail * glyphBits * mix(0.55, 0.88, fineGridReadability));
+            float3 rainInk = clamp(
+                (rainBase * 0.55) + (rainParticle * particleGlow * 1.24) + (rainParticle * headMask * 0.32),
+                float3(0.0),
+                float3(1.0)
+            );
             styledColor = mix(rainBase, rainInk, rainMask);
-            styledColor = mix(styledColor, styledColor + styledColor * 0.45, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.14);
+            styledColor = mix(styledColor, styledColor + (rainParticle * 0.22), headMask * 0.40);
+            styledColor = mix(styledColor, styledColor + styledColor * 0.34, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.12);
         }
 
         if (uniforms.renderMode == 6) {
@@ -380,11 +391,12 @@ enum ShaderSource {
             float3 neon = mix(neonA, neonB, magentaMix);
 
             float3 base = pow(clamp(cyberSource, float3(0.0), float3(1.0)), float3(0.86));
-            float3 shadowTint = float3(0.012, 0.020, 0.036);
+            base = clamp(((base + 0.03) - 0.5) * 1.08 + 0.5, float3(0.0), float3(1.0));
+            float3 shadowTint = float3(0.022, 0.030, 0.048);
             float3 coolTint = float3(0.58, 0.86, 1.0);
             base = mix(shadowTint, base * coolTint, smoothstep(0.04, 0.98, cyberLum));
-            base *= 0.62 + (0.26 * scanline);
-            base *= mix(0.74, 1.0, vignette);
+            base *= 0.72 + (0.28 * scanline);
+            base *= mix(0.82, 1.0, vignette);
             base += float3(0.0, 0.18, 0.22) * sweep;
             base = mix(base, float3(0.0, 0.32, 0.42), hudGrid * 0.30);
             base = mix(base, neon, neonEdge * 0.70);
