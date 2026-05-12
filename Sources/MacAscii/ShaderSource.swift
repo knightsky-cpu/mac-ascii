@@ -371,36 +371,22 @@ enum ShaderSource {
             styledColor = mix(rainBase, rainInk, rainMask);
             styledColor = mix(styledColor, styledColor + (rainParticle * 0.22), headMask * 0.40);
             styledColor = mix(styledColor, styledColor + styledColor * 0.34, edgeMask * clamp(uniforms.edgeStrength, 0.0, 2.0) * 0.12);
+            styledColor = clamp(((styledColor + 0.04) - 0.5) * 1.18 + 0.5, float3(0.0), float3(1.0));
         }
 
         if (uniforms.renderMode == 6) {
-            float3 cyberSource = floor(clamp(cellColor, float3(0.0), float3(1.0)) * 10.0 + 0.5) / 10.0;
-            float cyberLum = luminance(cyberSource);
-            float scanline = 0.88 + (0.12 * sin((uv.y * uniforms.viewportSize.y * 1.65) + uniforms.time * 10.0));
+            float3 cyberSource = clamp(cellColor, float3(0.0), float3(1.0));
             float sweep = smoothstep(0.028, 0.0, abs(fract((uv.y * 0.85) - uniforms.time * 0.08) - 0.5));
-            float verticalHud = 1.0 - smoothstep(0.010, 0.038, min(local.x, 1.0 - local.x));
-            float horizontalHud = 1.0 - smoothstep(0.010, 0.038, min(local.y, 1.0 - local.y));
-            float hudGrid = max(verticalHud, horizontalHud) * 0.22;
 
             float edgeControl = clamp(uniforms.edgeStrength, 0.0, 2.0);
-            float neonEdge = smoothstep(0.18, 0.86, edgeGlyph * coherentEdgeStrength * (0.62 + edgeControl));
-            float edgeBloom = smoothstep(0.06, 0.58, edgeGlyph * coherentEdgeStrength * (0.52 + edgeControl));
-            float magentaMix = step(0.5, hash);
-            float3 neonA = float3(0.00, 0.92, 1.00);
-            float3 neonB = float3(1.00, 0.08, 0.72);
-            float3 neon = mix(neonA, neonB, magentaMix);
+            float neonEdge = smoothstep(0.10, 0.62, edgeGlyph * coherentEdgeStrength * (0.92 + edgeControl));
+            float edgeBloom = smoothstep(0.03, 0.40, edgeGlyph * coherentEdgeStrength * (0.82 + edgeControl));
+            float3 neon = float3(1.00, 0.10, 0.74);
 
-            float3 base = pow(clamp(cyberSource, float3(0.0), float3(1.0)), float3(0.86));
-            base = clamp(((base + 0.03) - 0.5) * 1.08 + 0.5, float3(0.0), float3(1.0));
-            float3 shadowTint = float3(0.022, 0.030, 0.048);
-            float3 coolTint = float3(0.58, 0.86, 1.0);
-            base = mix(shadowTint, base * coolTint, smoothstep(0.04, 0.98, cyberLum));
-            base *= 0.72 + (0.28 * scanline);
-            base *= mix(0.82, 1.0, vignette);
-            base += float3(0.0, 0.18, 0.22) * sweep;
-            base = mix(base, float3(0.0, 0.32, 0.42), hudGrid * 0.30);
-            base = mix(base, neon, neonEdge * 0.70);
-            base += neon * edgeBloom * 0.18;
+            float3 base = cyberSource;
+            base += float3(0.0, 0.18, 0.26) * sweep;
+            base = mix(base, neon, neonEdge * 0.92);
+            base += neon * edgeBloom * 0.34;
             styledColor = clamp(base, float3(0.0), float3(1.0));
         }
 
