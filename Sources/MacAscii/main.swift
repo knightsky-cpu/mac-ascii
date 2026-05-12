@@ -3,6 +3,21 @@ import MetalKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let opacitySelectionValues: [Float] = stride(from: 0.10 as Float, through: 1.00 as Float, by: 0.05).map { $0 }
+    private static let brightnessSelectionValues: [Float] = [
+        -0.50, -0.40, -0.30, -0.20, -0.10, -0.05,
+        0.00, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50,
+    ]
+    private static let contrastSelectionValues: [Float] = [
+        0.50, 0.65, 0.80, 0.90, 1.00, 1.10, 1.20, 1.35, 1.50, 1.75, 2.00,
+    ]
+    private static let gammaSelectionValues: [Float] = [
+        0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.20, 1.40, 1.60, 1.80, 2.00,
+    ]
+    private static let edgeSelectionValues: [Float] = [
+        0.00, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00,
+    ]
+
     private let state = AppState()
     private var metalView: MTKView?
     private var window: OverlayWindow?
@@ -20,6 +35,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toneMenuItem: NSMenuItem?
     private var edgeMenuItem: NSMenuItem?
     private var windowLevelMenuItem: NSMenuItem?
+    private var gridSelectionMenu: NSMenu?
+    private var styleSelectionMenu: NSMenu?
+    private var renderModeSelectionMenu: NSMenu?
+    private var luminanceSelectionMenu: NSMenu?
+    private var frameRateSelectionMenu: NSMenu?
+    private var opacitySelectionMenu: NSMenu?
+    private var brightnessSelectionMenu: NSMenu?
+    private var contrastSelectionMenu: NSMenu?
+    private var gammaSelectionMenu: NSMenu?
+    private var edgeSelectionMenu: NSMenu?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -131,6 +156,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cycleGridItem.target = self
         menu.addItem(cycleGridItem)
 
+        let selectGridItem = NSMenuItem(title: "Select Grid", action: nil, keyEquivalent: "")
+        let gridSelectionMenu = NSMenu(title: "Select Grid")
+        for (index, preset) in state.gridPresets.enumerated() {
+            let item = NSMenuItem(
+                title: "\(preset.name) (\(Int(preset.cellSize)))",
+                action: #selector(selectGridFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = index
+            gridSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(gridSelectionMenu, for: selectGridItem)
+        menu.addItem(selectGridItem)
+
         let cycleStyleItem = NSMenuItem(
             title: "Cycle Style",
             action: #selector(cycleStyleFromMenu),
@@ -138,6 +178,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         cycleStyleItem.target = self
         menu.addItem(cycleStyleItem)
+
+        let selectStyleItem = NSMenuItem(title: "Select Style", action: nil, keyEquivalent: "")
+        let styleSelectionMenu = NSMenu(title: "Select Style")
+        for (index, style) in state.visualStyles.enumerated() {
+            let item = NSMenuItem(title: style.name, action: #selector(selectStyleFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            styleSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(styleSelectionMenu, for: selectStyleItem)
+        menu.addItem(selectStyleItem)
 
         let cycleRenderModeItem = NSMenuItem(
             title: "Cycle Render Mode",
@@ -147,6 +198,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cycleRenderModeItem.target = self
         menu.addItem(cycleRenderModeItem)
 
+        let selectRenderModeItem = NSMenuItem(title: "Select Render Mode", action: nil, keyEquivalent: "")
+        let renderModeSelectionMenu = NSMenu(title: "Select Render Mode")
+        for mode in RenderMode.allCases {
+            let item = NSMenuItem(title: mode.name, action: #selector(selectRenderModeFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = Int(mode.mode)
+            renderModeSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(renderModeSelectionMenu, for: selectRenderModeItem)
+        menu.addItem(selectRenderModeItem)
+
         let toggleLuminanceItem = NSMenuItem(
             title: "Toggle 10/20 Luminance",
             action: #selector(toggleLuminanceFromMenu),
@@ -155,6 +217,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleLuminanceItem.target = self
         menu.addItem(toggleLuminanceItem)
 
+        let selectLuminanceItem = NSMenuItem(title: "Select Luminance", action: nil, keyEquivalent: "")
+        let luminanceSelectionMenu = NSMenu(title: "Select Luminance")
+        for mode in LuminanceMode.allCases {
+            let item = NSMenuItem(
+                title: "\(mode.bucketCount) buckets",
+                action: #selector(selectLuminanceFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = mode.bucketCount
+            luminanceSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(luminanceSelectionMenu, for: selectLuminanceItem)
+        menu.addItem(selectLuminanceItem)
+
         let cycleFrameRateItem = NSMenuItem(
             title: "Cycle FPS",
             action: #selector(cycleFrameRateFromMenu),
@@ -162,6 +239,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         cycleFrameRateItem.target = self
         menu.addItem(cycleFrameRateItem)
+
+        let selectFrameRateItem = NSMenuItem(title: "Select FPS", action: nil, keyEquivalent: "")
+        let frameRateSelectionMenu = NSMenu(title: "Select FPS")
+        menu.setSubmenu(frameRateSelectionMenu, for: selectFrameRateItem)
+        menu.addItem(selectFrameRateItem)
 
         let opacityDownItem = NSMenuItem(
             title: "Opacity Down",
@@ -178,6 +260,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         opacityUpItem.target = self
         menu.addItem(opacityUpItem)
+
+        let selectOpacityItem = NSMenuItem(title: "Select Opacity", action: nil, keyEquivalent: "")
+        let opacitySelectionMenu = NSMenu(title: "Select Opacity")
+        for value in Self.opacitySelectionValues {
+            let item = makeFloatSelectionItem(
+                title: "\(Int(round(value * 100)))%",
+                value: value,
+                action: #selector(selectOpacityFromMenu(_:))
+            )
+            opacitySelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(opacitySelectionMenu, for: selectOpacityItem)
+        menu.addItem(selectOpacityItem)
 
         menu.addItem(.separator())
 
@@ -197,6 +292,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         brightnessUpItem.target = self
         menu.addItem(brightnessUpItem)
 
+        let selectBrightnessItem = NSMenuItem(title: "Select Brightness", action: nil, keyEquivalent: "")
+        let brightnessSelectionMenu = NSMenu(title: "Select Brightness")
+        for value in Self.brightnessSelectionValues {
+            let item = makeFloatSelectionItem(
+                title: String(format: "%.2f", value),
+                value: value,
+                action: #selector(selectBrightnessFromMenu(_:))
+            )
+            brightnessSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(brightnessSelectionMenu, for: selectBrightnessItem)
+        menu.addItem(selectBrightnessItem)
+
         let contrastDownItem = NSMenuItem(
             title: "Contrast Down",
             action: #selector(contrastDownFromMenu),
@@ -213,6 +321,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         contrastUpItem.target = self
         menu.addItem(contrastUpItem)
 
+        let selectContrastItem = NSMenuItem(title: "Select Contrast", action: nil, keyEquivalent: "")
+        let contrastSelectionMenu = NSMenu(title: "Select Contrast")
+        for value in Self.contrastSelectionValues {
+            let item = makeFloatSelectionItem(
+                title: String(format: "%.2f", value),
+                value: value,
+                action: #selector(selectContrastFromMenu(_:))
+            )
+            contrastSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(contrastSelectionMenu, for: selectContrastItem)
+        menu.addItem(selectContrastItem)
+
         let gammaDownItem = NSMenuItem(
             title: "Gamma Down",
             action: #selector(gammaDownFromMenu),
@@ -228,6 +349,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         gammaUpItem.target = self
         menu.addItem(gammaUpItem)
+
+        let selectGammaItem = NSMenuItem(title: "Select Gamma", action: nil, keyEquivalent: "")
+        let gammaSelectionMenu = NSMenu(title: "Select Gamma")
+        for value in Self.gammaSelectionValues {
+            let item = makeFloatSelectionItem(
+                title: String(format: "%.2f", value),
+                value: value,
+                action: #selector(selectGammaFromMenu(_:))
+            )
+            gammaSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(gammaSelectionMenu, for: selectGammaItem)
+        menu.addItem(selectGammaItem)
 
         menu.addItem(.separator())
 
@@ -246,6 +380,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         edgeUpItem.target = self
         menu.addItem(edgeUpItem)
+
+        let selectEdgeItem = NSMenuItem(title: "Select Edge Strength", action: nil, keyEquivalent: "")
+        let edgeSelectionMenu = NSMenu(title: "Select Edge Strength")
+        for value in Self.edgeSelectionValues {
+            let item = makeFloatSelectionItem(
+                title: String(format: "%.2f", value),
+                value: value,
+                action: #selector(selectEdgeFromMenu(_:))
+            )
+            edgeSelectionMenu.addItem(item)
+        }
+        menu.setSubmenu(edgeSelectionMenu, for: selectEdgeItem)
+        menu.addItem(selectEdgeItem)
 
         menu.addItem(.separator())
 
@@ -313,6 +460,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.toneMenuItem = toneMenuItem
         self.edgeMenuItem = edgeMenuItem
         self.windowLevelMenuItem = windowLevelMenuItem
+        self.gridSelectionMenu = gridSelectionMenu
+        self.styleSelectionMenu = styleSelectionMenu
+        self.renderModeSelectionMenu = renderModeSelectionMenu
+        self.luminanceSelectionMenu = luminanceSelectionMenu
+        self.frameRateSelectionMenu = frameRateSelectionMenu
+        self.opacitySelectionMenu = opacitySelectionMenu
+        self.brightnessSelectionMenu = brightnessSelectionMenu
+        self.contrastSelectionMenu = contrastSelectionMenu
+        self.gammaSelectionMenu = gammaSelectionMenu
+        self.edgeSelectionMenu = edgeSelectionMenu
         refreshStatusMenu()
     }
 
@@ -332,6 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         edgeMenuItem?.title = String(format: "Edge: %.2f", state.edgeStrength)
         windowLevelMenuItem?.title = "Window level: \(window?.levelDescription ?? "unavailable")"
+        refreshSelectionMenus()
     }
 
     @objc private func toggleOverlayFromMenu() {
@@ -342,20 +500,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handle(command: .cycleGrid)
     }
 
+    @objc private func selectGridFromMenu(_ sender: NSMenuItem) {
+        state.setGridIndex(sender.tag)
+        finishStateChange(hudMessage: "Grid: \(state.activeGrid.name) (\(Int(state.activeGrid.cellSize)))")
+    }
+
     @objc private func cycleStyleFromMenu() {
         handle(command: .cycleStyle)
+    }
+
+    @objc private func selectStyleFromMenu(_ sender: NSMenuItem) {
+        state.setStyleIndex(sender.tag)
+        finishStateChange(hudMessage: "Style: \(state.activeStyle.name)")
     }
 
     @objc private func cycleRenderModeFromMenu() {
         handle(command: .cycleRenderMode)
     }
 
+    @objc private func selectRenderModeFromMenu(_ sender: NSMenuItem) {
+        guard let mode = RenderMode.allCases.first(where: { Int($0.mode) == sender.tag }) else {
+            return
+        }
+        state.setRenderMode(mode)
+        finishStateChange(hudMessage: "Render: \(state.renderMode.name)")
+    }
+
     @objc private func toggleLuminanceFromMenu() {
         handle(command: .toggleLuminance)
     }
 
+    @objc private func selectLuminanceFromMenu(_ sender: NSMenuItem) {
+        guard let mode = LuminanceMode.allCases.first(where: { $0.bucketCount == sender.tag }) else {
+            return
+        }
+        state.setLuminanceMode(mode)
+        finishStateChange(hudMessage: "Luminance: \(state.luminanceMode.bucketCount) buckets")
+    }
+
     @objc private func cycleFrameRateFromMenu() {
         handle(command: .cycleFrameRate)
+    }
+
+    @objc private func selectFrameRateFromMenu(_ sender: NSMenuItem) {
+        state.setFrameRate(sender.tag)
+        finishStateChange(hudMessage: "FPS: \(state.frameRate)")
     }
 
     @objc private func opacityDownFromMenu() {
@@ -366,6 +555,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handle(command: .increaseOpacity)
     }
 
+    @objc private func selectOpacityFromMenu(_ sender: NSMenuItem) {
+        guard let value = floatValue(from: sender) else {
+            return
+        }
+        state.setOverlayOpacity(value)
+        finishStateChange(hudMessage: "Opacity: \(Int(state.overlayOpacity * 100))%")
+    }
+
     @objc private func brightnessDownFromMenu() {
         state.decreaseBrightness()
         finishStateChange(hudMessage: String(format: "Brightness: %.2f", state.brightness))
@@ -373,6 +570,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func brightnessUpFromMenu() {
         state.increaseBrightness()
+        finishStateChange(hudMessage: String(format: "Brightness: %.2f", state.brightness))
+    }
+
+    @objc private func selectBrightnessFromMenu(_ sender: NSMenuItem) {
+        guard let value = floatValue(from: sender) else {
+            return
+        }
+        state.setBrightness(value)
         finishStateChange(hudMessage: String(format: "Brightness: %.2f", state.brightness))
     }
 
@@ -386,6 +591,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         finishStateChange(hudMessage: String(format: "Contrast: %.2f", state.contrast))
     }
 
+    @objc private func selectContrastFromMenu(_ sender: NSMenuItem) {
+        guard let value = floatValue(from: sender) else {
+            return
+        }
+        state.setContrast(value)
+        finishStateChange(hudMessage: String(format: "Contrast: %.2f", state.contrast))
+    }
+
     @objc private func gammaDownFromMenu() {
         state.decreaseGamma()
         finishStateChange(hudMessage: String(format: "Gamma: %.2f", state.gamma))
@@ -396,6 +609,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         finishStateChange(hudMessage: String(format: "Gamma: %.2f", state.gamma))
     }
 
+    @objc private func selectGammaFromMenu(_ sender: NSMenuItem) {
+        guard let value = floatValue(from: sender) else {
+            return
+        }
+        state.setGamma(value)
+        finishStateChange(hudMessage: String(format: "Gamma: %.2f", state.gamma))
+    }
+
     @objc private func edgeDownFromMenu() {
         state.decreaseEdgeStrength()
         finishStateChange(hudMessage: String(format: "Edge: %.2f", state.edgeStrength))
@@ -403,6 +624,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func edgeUpFromMenu() {
         state.increaseEdgeStrength()
+        finishStateChange(hudMessage: String(format: "Edge: %.2f", state.edgeStrength))
+    }
+
+    @objc private func selectEdgeFromMenu(_ sender: NSMenuItem) {
+        guard let value = floatValue(from: sender) else {
+            return
+        }
+        state.setEdgeStrength(value)
         finishStateChange(hudMessage: String(format: "Edge: %.2f", state.edgeStrength))
     }
 
@@ -463,6 +692,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func refreshSelectionMenus() {
+        for item in gridSelectionMenu?.items ?? [] {
+            item.state = item.tag == state.gridIndex ? .on : .off
+        }
+        for item in styleSelectionMenu?.items ?? [] {
+            item.state = item.tag == state.styleIndex ? .on : .off
+        }
+        for item in renderModeSelectionMenu?.items ?? [] {
+            item.state = item.tag == Int(state.renderMode.mode) ? .on : .off
+        }
+        for item in luminanceSelectionMenu?.items ?? [] {
+            item.state = item.tag == state.luminanceMode.bucketCount ? .on : .off
+        }
+
+        frameRateSelectionMenu?.removeAllItems()
+        for fps in state.supportedFrameRates {
+            let item = NSMenuItem(title: "\(fps) FPS", action: #selector(selectFrameRateFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = fps
+            item.state = fps == state.frameRate ? .on : .off
+            frameRateSelectionMenu?.addItem(item)
+        }
+
+        refreshFloatSelectionMenu(opacitySelectionMenu, currentValue: state.overlayOpacity)
+        refreshFloatSelectionMenu(brightnessSelectionMenu, currentValue: state.brightness)
+        refreshFloatSelectionMenu(contrastSelectionMenu, currentValue: state.contrast)
+        refreshFloatSelectionMenu(gammaSelectionMenu, currentValue: state.gamma)
+        refreshFloatSelectionMenu(edgeSelectionMenu, currentValue: state.edgeStrength)
+    }
+
     private func hudMessage(for command: HotkeyManager.Command) -> String {
         switch command {
         case .toggleOverlay:
@@ -507,6 +766,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "edge=\(String(format: "%.2f", renderState.edgeStrength)) " +
             "window-level=\(window?.levelDescription ?? "unavailable")"
         )
+    }
+
+    private func makeFloatSelectionItem(title: String, value: Float, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = NSNumber(value: value)
+        return item
+    }
+
+    private func floatValue(from item: NSMenuItem) -> Float? {
+        (item.representedObject as? NSNumber)?.floatValue
+    }
+
+    private func refreshFloatSelectionMenu(_ menu: NSMenu?, currentValue: Float) {
+        for item in menu?.items ?? [] {
+            let value = (item.representedObject as? NSNumber)?.floatValue ?? .greatestFiniteMagnitude
+            item.state = abs(value - currentValue) < 0.001 ? .on : .off
+        }
     }
 }
 
