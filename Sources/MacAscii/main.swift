@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var styleMenuItem: NSMenuItem?
     private var luminanceMenuItem: NSMenuItem?
     private var opacityMenuItem: NSMenuItem?
+    private var toneMenuItem: NSMenuItem?
     private var windowLevelMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -82,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusMenu()
 
         state.logState("started")
-        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up")
+        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up, Ctrl+Option+B brightness, Ctrl+Option+C contrast, Ctrl+Option+G gamma")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -152,6 +153,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         opacityUpItem.target = self
         menu.addItem(opacityUpItem)
 
+        menu.addItem(.separator())
+
+        let brightnessDownItem = NSMenuItem(
+            title: "Brightness Down",
+            action: #selector(brightnessDownFromMenu),
+            keyEquivalent: ""
+        )
+        brightnessDownItem.target = self
+        menu.addItem(brightnessDownItem)
+
+        let brightnessUpItem = NSMenuItem(
+            title: "Brightness Up",
+            action: #selector(brightnessUpFromMenu),
+            keyEquivalent: ""
+        )
+        brightnessUpItem.target = self
+        menu.addItem(brightnessUpItem)
+
+        let contrastDownItem = NSMenuItem(
+            title: "Contrast Down",
+            action: #selector(contrastDownFromMenu),
+            keyEquivalent: ""
+        )
+        contrastDownItem.target = self
+        menu.addItem(contrastDownItem)
+
+        let contrastUpItem = NSMenuItem(
+            title: "Contrast Up",
+            action: #selector(contrastUpFromMenu),
+            keyEquivalent: ""
+        )
+        contrastUpItem.target = self
+        menu.addItem(contrastUpItem)
+
+        let gammaDownItem = NSMenuItem(
+            title: "Gamma Down",
+            action: #selector(gammaDownFromMenu),
+            keyEquivalent: ""
+        )
+        gammaDownItem.target = self
+        menu.addItem(gammaDownItem)
+
+        let gammaUpItem = NSMenuItem(
+            title: "Gamma Up",
+            action: #selector(gammaUpFromMenu),
+            keyEquivalent: ""
+        )
+        gammaUpItem.target = self
+        menu.addItem(gammaUpItem)
+
+        menu.addItem(.separator())
+
         let resetItem = NSMenuItem(
             title: "Reset Visual Defaults",
             action: #selector(resetVisualDefaultsFromMenu),
@@ -178,6 +231,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         opacityMenuItem.isEnabled = false
         menu.addItem(opacityMenuItem)
 
+        let toneMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        toneMenuItem.isEnabled = false
+        menu.addItem(toneMenuItem)
+
         let windowLevelMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         windowLevelMenuItem.isEnabled = false
         menu.addItem(windowLevelMenuItem)
@@ -195,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.styleMenuItem = styleMenuItem
         self.luminanceMenuItem = luminanceMenuItem
         self.opacityMenuItem = opacityMenuItem
+        self.toneMenuItem = toneMenuItem
         self.windowLevelMenuItem = windowLevelMenuItem
         refreshStatusMenu()
     }
@@ -205,6 +263,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         styleMenuItem?.title = "Style: \(state.activeStyle.name)"
         luminanceMenuItem?.title = "Luminance: \(state.luminanceMode.bucketCount) buckets"
         opacityMenuItem?.title = "Opacity: \(Int(state.overlayOpacity * 100))%"
+        toneMenuItem?.title = String(
+            format: "Tone: B %.2f  C %.2f  G %.2f",
+            state.brightness,
+            state.contrast,
+            state.gamma
+        )
         windowLevelMenuItem?.title = "Window level: \(window?.levelDescription ?? "unavailable")"
     }
 
@@ -232,6 +296,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handle(command: .increaseOpacity)
     }
 
+    @objc private func brightnessDownFromMenu() {
+        state.decreaseBrightness()
+        applyStateToUI()
+    }
+
+    @objc private func brightnessUpFromMenu() {
+        state.increaseBrightness()
+        applyStateToUI()
+    }
+
+    @objc private func contrastDownFromMenu() {
+        state.decreaseContrast()
+        applyStateToUI()
+    }
+
+    @objc private func contrastUpFromMenu() {
+        state.increaseContrast()
+        applyStateToUI()
+    }
+
+    @objc private func gammaDownFromMenu() {
+        state.decreaseGamma()
+        applyStateToUI()
+    }
+
+    @objc private func gammaUpFromMenu() {
+        state.increaseGamma()
+        applyStateToUI()
+    }
+
     @objc private func resetVisualDefaultsFromMenu() {
         state.resetVisualDefaults()
         applyStateToUI()
@@ -256,6 +350,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.decreaseOpacity()
         case .increaseOpacity:
             state.increaseOpacity()
+        case .cycleBrightness:
+            state.cycleBrightness()
+        case .cycleContrast:
+            state.cycleContrast()
+        case .cycleGamma:
+            state.cycleGamma()
         }
         applyStateToUI()
     }
@@ -278,6 +378,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "style=\(state.activeStyle.name) style-mode=\(renderState.styleMode) " +
             "luminance-buckets=\(renderState.luminanceBuckets) " +
             "opacity=\(Int(renderState.opacity * 100))% " +
+            "brightness=\(String(format: "%.2f", renderState.brightness)) " +
+            "contrast=\(String(format: "%.2f", renderState.contrast)) " +
+            "gamma=\(String(format: "%.2f", renderState.gamma)) " +
             "window-level=\(window?.levelDescription ?? "unavailable")"
         )
     }

@@ -10,6 +10,9 @@ private struct Uniforms {
     var styleMode: Int32
     var luminanceBuckets: Int32
     var opacity: Float
+    var brightness: Float
+    var contrast: Float
+    var gamma: Float
     var time: Float
 }
 
@@ -101,7 +104,10 @@ final class Renderer: NSObject, MTKViewDelegate {
                 "cell-size=\(renderState.cellSize) " +
                 "style-mode=\(renderState.styleMode) " +
                 "luminance-buckets=\(renderState.luminanceBuckets) " +
-                "opacity=\(renderState.opacity)"
+                "opacity=\(renderState.opacity) " +
+                "brightness=\(renderState.brightness) " +
+                "contrast=\(renderState.contrast) " +
+                "gamma=\(renderState.gamma)"
             )
             didLogRenderState = true
         }
@@ -113,6 +119,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             styleMode: renderState.styleMode,
             luminanceBuckets: renderState.luminanceBuckets,
             opacity: renderState.opacity,
+            brightness: renderState.brightness,
+            contrast: renderState.contrast,
+            gamma: renderState.gamma,
             time: Float(CFAbsoluteTimeGetCurrent() - startedAt)
         )
 

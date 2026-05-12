@@ -15,6 +15,9 @@ enum ShaderSource {
         int styleMode;
         int luminanceBuckets;
         float opacity;
+        float brightness;
+        float contrast;
+        float gamma;
         float time;
     };
 
@@ -84,6 +87,9 @@ enum ShaderSource {
         float2 cellUv = (floor(cell) + float2(0.5)) / gridSize;
 
         float3 cellColor = source.sample(linearSampler, cellUv).rgb;
+        float toneGamma = clamp(uniforms.gamma, 0.50, 2.0);
+        cellColor = clamp(((cellColor + uniforms.brightness) - 0.5) * clamp(uniforms.contrast, 0.50, 2.0) + 0.5, float3(0.0), float3(1.0));
+        cellColor = pow(cellColor, float3(1.0 / toneGamma));
         float lum = luminance(cellColor);
         float exposed = pow(clamp((lum * 1.35) + 0.08, 0.0, 0.999), 0.72);
         float bucket = floor(exposed * float(uniforms.luminanceBuckets));

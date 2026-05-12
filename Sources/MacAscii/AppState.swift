@@ -30,6 +30,21 @@ final class AppState {
     static let defaultLuminanceMode: LuminanceMode = .classic10
     static let defaultOverlayVisible = true
     static let defaultOverlayOpacity: Float = 0.90
+    static let defaultBrightness: Float = 0.0
+    static let defaultContrast: Float = 1.0
+    static let defaultGamma: Float = 1.0
+    static let brightnessCycle: [Float] = [
+        0.00, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50,
+        -0.50, -0.40, -0.30, -0.20, -0.10, -0.05,
+    ]
+    static let contrastCycle: [Float] = [
+        1.00, 1.10, 1.20, 1.35, 1.50, 1.75, 2.00,
+        0.50, 0.65, 0.80, 0.90,
+    ]
+    static let gammaCycle: [Float] = [
+        1.00, 0.90, 0.80, 0.70, 0.60, 0.50,
+        1.20, 1.40, 1.60, 1.80, 2.00,
+    ]
 
     private enum SettingsKey {
         static let overlayVisible = "overlayVisible"
@@ -75,6 +90,9 @@ final class AppState {
     private(set) var luminanceMode: LuminanceMode = .classic10
     private(set) var overlayVisible = true
     private(set) var overlayOpacity = AppState.defaultOverlayOpacity
+    private(set) var brightness = AppState.defaultBrightness
+    private(set) var contrast = AppState.defaultContrast
+    private(set) var gamma = AppState.defaultGamma
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -117,6 +135,42 @@ final class AppState {
         setOverlayOpacity(overlayOpacity - 0.05)
     }
 
+    func increaseBrightness() {
+        setBrightness(brightness + 0.05)
+    }
+
+    func decreaseBrightness() {
+        setBrightness(brightness - 0.05)
+    }
+
+    func increaseContrast() {
+        setContrast(contrast + 0.10)
+    }
+
+    func decreaseContrast() {
+        setContrast(contrast - 0.10)
+    }
+
+    func increaseGamma() {
+        setGamma(gamma + 0.10)
+    }
+
+    func decreaseGamma() {
+        setGamma(gamma - 0.10)
+    }
+
+    func cycleBrightness() {
+        setBrightness(nextCycleValue(current: brightness, values: Self.brightnessCycle))
+    }
+
+    func cycleContrast() {
+        setContrast(nextCycleValue(current: contrast, values: Self.contrastCycle))
+    }
+
+    func cycleGamma() {
+        setGamma(nextCycleValue(current: gamma, values: Self.gammaCycle))
+    }
+
     func setOverlayVisible(_ visible: Bool) {
         overlayVisible = visible
         save()
@@ -154,25 +208,67 @@ final class AppState {
         logState("set-opacity")
     }
 
+    func setBrightness(_ value: Float) {
+        brightness = min(0.50, max(-0.50, value))
+        logState("set-brightness")
+    }
+
+    func setContrast(_ value: Float) {
+        contrast = min(2.0, max(0.50, value))
+        logState("set-contrast")
+    }
+
+    func setGamma(_ value: Float) {
+        gamma = min(2.0, max(0.50, value))
+        logState("set-gamma")
+    }
+
+    private func nextCycleValue(current: Float, values: [Float]) -> Float {
+        guard !values.isEmpty else {
+            return current
+        }
+
+        let epsilon: Float = 0.001
+        if let index = values.firstIndex(where: { abs($0 - current) < epsilon }) {
+            return values[(index + 1) % values.count]
+        }
+
+        return values[0]
+    }
+
     func resetVisualDefaults() {
         overlayVisible = Self.defaultOverlayVisible
         gridIndex = gridPresets.firstIndex { $0.name == Self.defaultGridName } ?? 3
         styleIndex = visualStyles.firstIndex { $0.name == Self.defaultStyleName } ?? 0
         luminanceMode = Self.defaultLuminanceMode
         overlayOpacity = Self.defaultOverlayOpacity
+        brightness = Self.defaultBrightness
+        contrast = Self.defaultContrast
+        gamma = Self.defaultGamma
         save()
         logState("reset-visual-defaults")
     }
 
-    func sanitizedRenderState() -> (cellSize: Float, styleMode: Int32, luminanceBuckets: Int32, opacity: Float) {
+    func sanitizedRenderState() -> (
+        cellSize: Float,
+        styleMode: Int32,
+        luminanceBuckets: Int32,
+        opacity: Float,
+        brightness: Float,
+        contrast: Float,
+        gamma: Float
+    ) {
         let cellSize = max(1.0, activeGrid.cellSize)
         let knownStyleModes = Set(visualStyles.map(\.mode))
         let styleMode = knownStyleModes.contains(activeStyle.mode) ? activeStyle.mode : 0
         let buckets = luminanceMode.bucketCount
         let luminanceBuckets = (buckets == 10 || buckets == 20) ? Int32(buckets) : 10
         let opacity = min(1.0, max(0.10, overlayOpacity))
+        let brightness = min(0.50, max(-0.50, self.brightness))
+        let contrast = min(2.0, max(0.50, self.contrast))
+        let gamma = min(2.0, max(0.50, self.gamma))
 
-        return (cellSize, styleMode, luminanceBuckets, opacity)
+        return (cellSize, styleMode, luminanceBuckets, opacity, brightness, contrast, gamma)
     }
 
     private func load() {
@@ -209,7 +305,10 @@ final class AppState {
             "grid=\(activeGrid.name) cell-size=\(activeGrid.cellSize) " +
             "style=\(activeStyle.name) style-mode=\(activeStyle.mode) " +
             "luminance-buckets=\(luminanceMode.bucketCount) " +
-            "opacity=\(Int(overlayOpacity * 100))%"
+            "opacity=\(Int(overlayOpacity * 100))% " +
+            "brightness=\(String(format: "%.2f", brightness)) " +
+            "contrast=\(String(format: "%.2f", contrast)) " +
+            "gamma=\(String(format: "%.2f", gamma))"
         )
     }
 }
