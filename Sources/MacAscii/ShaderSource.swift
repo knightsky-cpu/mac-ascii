@@ -487,16 +487,36 @@ enum ShaderSource {
         float2 direction = normalize(delta + float2(0.0001));
         direction.x /= aspect;
 
-        float waveRadius = age * 0.46;
-        float waveDistance = abs(dist - waveRadius);
-        float ring = 1.0 - smoothstep(0.0, 0.045 + (age * 0.010), waveDistance);
         float decay = pow(clamp(1.0 - (age / 2.2), 0.0, 1.0), 1.65);
-        float phase = sin((dist - waveRadius) * 105.0);
-        float amplitude = ring * decay * phase * 0.026;
+        float waveSpeed = 0.46;
+        float width = 0.032 + (age * 0.010);
+        float amplitude = 0.0;
 
-        float innerWake = (1.0 - smoothstep(0.0, waveRadius, dist)) *
+        float leadRadius = age * waveSpeed;
+        float leadDistance = abs(dist - leadRadius);
+        float leadRing = 1.0 - smoothstep(0.0, width, leadDistance);
+        amplitude += leadRing * sin((dist - leadRadius) * 118.0) * 0.044;
+
+        float secondRadius = max(0.0, (age - 0.12) * waveSpeed);
+        float secondDistance = abs(dist - secondRadius);
+        float secondRing = (1.0 - smoothstep(0.0, width * 1.12, secondDistance)) * smoothstep(0.08, 0.22, age);
+        amplitude += secondRing * sin((dist - secondRadius) * 108.0) * 0.027;
+
+        float thirdRadius = max(0.0, (age - 0.24) * waveSpeed);
+        float thirdDistance = abs(dist - thirdRadius);
+        float thirdRing = (1.0 - smoothstep(0.0, width * 1.26, thirdDistance)) * smoothstep(0.18, 0.36, age);
+        amplitude += thirdRing * sin((dist - thirdRadius) * 98.0) * 0.017;
+
+        float fourthRadius = max(0.0, (age - 0.38) * waveSpeed);
+        float fourthDistance = abs(dist - fourthRadius);
+        float fourthRing = (1.0 - smoothstep(0.0, width * 1.42, fourthDistance)) * smoothstep(0.30, 0.52, age);
+        amplitude += fourthRing * sin((dist - fourthRadius) * 88.0) * 0.010;
+
+        amplitude *= decay;
+
+        float innerWake = (1.0 - smoothstep(0.0, leadRadius, dist)) *
                           smoothstep(0.0, 0.20, age) *
-                          decay * 0.004;
+                          decay * 0.006;
         return direction * (amplitude + innerWake);
     }
 
