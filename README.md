@@ -1,8 +1,8 @@
 # MacAscii
 
 Native macOS desktop overlay that renders the live screen through multiple
-procedural visual modes, including ASCII, retro block, halftone, CRT pixel,
-mosaic, matrix rain, and an experimental cyberpunk mode.
+procedural visual modes, including true ASCII, retro block, matrix rain,
+circuit bend, and liquid input modes.
 
 This is a Swift Package executable, so it builds with the macOS Command Line
 Tools already installed on this machine.
@@ -70,6 +70,7 @@ Ctrl+Option+A           Toggle overlay
 Ctrl+Option+Period      Cycle grid size
 Ctrl+Option+Apostrophe  Cycle visual style
 Ctrl+Option+M           Cycle render mode
+Ctrl+Option+K           Toggle circuit bend controls
 Ctrl+Option+Comma       Toggle 10/20 luminance buckets
 Ctrl+Option+F           Cycle FPS
 Ctrl+Option+Minus       Opacity down
@@ -104,7 +105,6 @@ Render modes:
 true-ascii
 true-blocky-retro
 matrix-rain
-cyberpunk
 circuit-bend
 liquid-input
 ```

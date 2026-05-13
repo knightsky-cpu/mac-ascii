@@ -18,7 +18,6 @@ enum RenderMode: String, CaseIterable {
     case trueAscii
     case trueBlockyRetro
     case matrixRain
-    case cyberpunk
     case circuitBend
     case inputBend
 
@@ -30,8 +29,6 @@ enum RenderMode: String, CaseIterable {
             return "true-blocky-retro"
         case .matrixRain:
             return "matrix-rain"
-        case .cyberpunk:
-            return "cyberpunk"
         case .circuitBend:
             return "circuit-bend"
         case .inputBend:
@@ -47,8 +44,6 @@ enum RenderMode: String, CaseIterable {
             return 8
         case .matrixRain:
             return 5
-        case .cyberpunk:
-            return 6
         case .circuitBend:
             return 9
         case .inputBend:
@@ -65,6 +60,26 @@ struct GridPreset {
 struct VisualStyle {
     let name: String
     let mode: Int32
+}
+
+struct CircuitBendControl {
+    var enabled: Bool
+    var amount: Float
+
+    var effectiveAmount: Float {
+        enabled ? amount : 0
+    }
+}
+
+enum CircuitBendControlID: Int, CaseIterable {
+    case rowShred = 1
+    case rgbDrift = 2
+    case smear = 3
+    case colorSwap = 4
+    case lumaInvert = 5
+    case bitRot = 6
+    case staticNoise = 7
+    case vSyncRoll = 8
 }
 
 final class AppState {
@@ -146,6 +161,14 @@ final class AppState {
     private(set) var contrast = AppState.defaultContrast
     private(set) var gamma = AppState.defaultGamma
     private(set) var edgeStrength = AppState.defaultEdgeStrength
+    private(set) var circuitRowShred = CircuitBendControl(enabled: true, amount: 1.0)
+    private(set) var circuitRGBDrift = CircuitBendControl(enabled: true, amount: 1.0)
+    private(set) var circuitSmear = CircuitBendControl(enabled: true, amount: 1.0)
+    private(set) var circuitColorSwap = CircuitBendControl(enabled: true, amount: 1.0)
+    private(set) var circuitLumaInvert = CircuitBendControl(enabled: true, amount: 1.0)
+    private(set) var circuitBitRot = CircuitBendControl(enabled: true, amount: 1.0)
+    private(set) var circuitStaticNoise = CircuitBendControl(enabled: true, amount: 1.0)
+    private(set) var circuitVSyncRoll = CircuitBendControl(enabled: true, amount: 1.0)
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -329,6 +352,56 @@ final class AppState {
         logState("set-edge-strength")
     }
 
+    func circuitBendControl(_ id: CircuitBendControlID) -> CircuitBendControl {
+        switch id {
+        case .rowShred:
+            return circuitRowShred
+        case .rgbDrift:
+            return circuitRGBDrift
+        case .smear:
+            return circuitSmear
+        case .colorSwap:
+            return circuitColorSwap
+        case .lumaInvert:
+            return circuitLumaInvert
+        case .bitRot:
+            return circuitBitRot
+        case .staticNoise:
+            return circuitStaticNoise
+        case .vSyncRoll:
+            return circuitVSyncRoll
+        }
+    }
+
+    func setCircuitBendControl(_ id: CircuitBendControlID, enabled: Bool? = nil, amount: Float? = nil) {
+        var control = circuitBendControl(id)
+        if let enabled {
+            control.enabled = enabled
+        }
+        if let amount {
+            control.amount = min(2.0, max(0.0, amount))
+        }
+        switch id {
+        case .rowShred:
+            circuitRowShred = control
+        case .rgbDrift:
+            circuitRGBDrift = control
+        case .smear:
+            circuitSmear = control
+        case .colorSwap:
+            circuitColorSwap = control
+        case .lumaInvert:
+            circuitLumaInvert = control
+        case .bitRot:
+            circuitBitRot = control
+        case .staticNoise:
+            circuitStaticNoise = control
+        case .vSyncRoll:
+            circuitVSyncRoll = control
+        }
+        logState("set-circuit-bend-control")
+    }
+
     private func nextCycleValue(current: Float, values: [Float]) -> Float {
         guard !values.isEmpty else {
             return current
@@ -379,7 +452,15 @@ final class AppState {
         brightness: Float,
         contrast: Float,
         gamma: Float,
-        edgeStrength: Float
+        edgeStrength: Float,
+        circuitRowShred: Float,
+        circuitRGBDrift: Float,
+        circuitSmear: Float,
+        circuitColorSwap: Float,
+        circuitLumaInvert: Float,
+        circuitBitRot: Float,
+        circuitStaticNoise: Float,
+        circuitVSyncRoll: Float
     ) {
         let cellSize = max(1.0, activeGrid.cellSize)
         let knownStyleModes = Set(visualStyles.map(\.mode))
@@ -393,7 +474,25 @@ final class AppState {
         let gamma = min(2.0, max(0.50, self.gamma))
         let edgeStrength = min(2.0, max(0.0, self.edgeStrength))
 
-        return (cellSize, styleMode, renderMode, luminanceBuckets, opacity, brightness, contrast, gamma, edgeStrength)
+        return (
+            cellSize,
+            styleMode,
+            renderMode,
+            luminanceBuckets,
+            opacity,
+            brightness,
+            contrast,
+            gamma,
+            edgeStrength,
+            circuitRowShred.effectiveAmount,
+            circuitRGBDrift.effectiveAmount,
+            circuitSmear.effectiveAmount,
+            circuitColorSwap.effectiveAmount,
+            circuitLumaInvert.effectiveAmount,
+            circuitBitRot.effectiveAmount,
+            circuitStaticNoise.effectiveAmount,
+            circuitVSyncRoll.effectiveAmount
+        )
     }
 
     private func load() {

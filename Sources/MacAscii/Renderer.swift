@@ -36,6 +36,14 @@ private struct Uniforms {
     var mouseTrail13: SIMD2<Float>
     var mouseTrail14: SIMD2<Float>
     var mouseTrail15: SIMD2<Float>
+    var circuitRowShred: Float
+    var circuitRGBDrift: Float
+    var circuitSmear: Float
+    var circuitColorSwap: Float
+    var circuitLumaInvert: Float
+    var circuitBitRot: Float
+    var circuitStaticNoise: Float
+    var circuitVSyncRoll: Float
 }
 
 final class Renderer: NSObject, MTKViewDelegate {
@@ -246,7 +254,15 @@ final class Renderer: NSObject, MTKViewDelegate {
             mouseTrail12: mouseTrail[12],
             mouseTrail13: mouseTrail[13],
             mouseTrail14: mouseTrail[14],
-            mouseTrail15: mouseTrail[15]
+            mouseTrail15: mouseTrail[15],
+            circuitRowShred: renderState.circuitRowShred,
+            circuitRGBDrift: renderState.circuitRGBDrift,
+            circuitSmear: renderState.circuitSmear,
+            circuitColorSwap: renderState.circuitColorSwap,
+            circuitLumaInvert: renderState.circuitLumaInvert,
+            circuitBitRot: renderState.circuitBitRot,
+            circuitStaticNoise: renderState.circuitStaticNoise,
+            circuitVSyncRoll: renderState.circuitVSyncRoll
         )
 
         if (shaderRenderMode == 7 || shaderRenderMode == 8), let activeCellMap {

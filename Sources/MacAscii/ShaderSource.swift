@@ -40,6 +40,14 @@ enum ShaderSource {
         float2 mouseTrail13;
         float2 mouseTrail14;
         float2 mouseTrail15;
+        float circuitRowShred;
+        float circuitRGBDrift;
+        float circuitSmear;
+        float circuitColorSwap;
+        float circuitLumaInvert;
+        float circuitBitRot;
+        float circuitStaticNoise;
+        float circuitVSyncRoll;
     };
 
     vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
@@ -267,17 +275,26 @@ enum ShaderSource {
         float2 uv = (float2(gid) + float2(0.5)) / outputSize;
         float time = uniforms.time;
 
+        float rowShredAmount = clamp(uniforms.circuitRowShred, 0.0, 2.0);
+        float rgbDriftAmount = clamp(uniforms.circuitRGBDrift, 0.0, 2.0);
+        float smearAmount = clamp(uniforms.circuitSmear, 0.0, 2.0);
+        float colorSwapAmount = clamp(uniforms.circuitColorSwap, 0.0, 2.0);
+        float lumaInvertAmount = clamp(uniforms.circuitLumaInvert, 0.0, 2.0);
+        float bitRotAmount = clamp(uniforms.circuitBitRot, 0.0, 2.0);
+        float staticAmount = clamp(uniforms.circuitStaticNoise, 0.0, 2.0);
+        float rollAmount = clamp(uniforms.circuitVSyncRoll, 0.0, 2.0);
+
         float pulse = pow(max(0.0, sin(time * 1.35)), 24.0);
         float row = floor(uv.y * outputSize.y);
         float rowSeed = hash12(float2(row, floor(time * 18.0)));
-        float rowGate = step(0.965 - (pulse * 0.035), rowSeed);
-        float rowShift = (hash12(float2(row * 0.37, floor(time * 23.0))) - 0.5) * 0.12 * rowGate;
-        float waveShift = sin((uv.y * 95.0) + (time * 8.0)) * 0.0035 * (0.35 + pulse);
-        float roll = pulse * 0.18;
+        float rowGate = step(0.965 - (pulse * 0.035 * rowShredAmount), rowSeed) * min(1.0, rowShredAmount);
+        float rowShift = (hash12(float2(row * 0.37, floor(time * 23.0))) - 0.5) * 0.12 * rowGate * rowShredAmount;
+        float waveShift = sin((uv.y * 95.0) + (time * 8.0)) * 0.0035 * (0.35 + pulse) * rowShredAmount;
+        float roll = pulse * 0.18 * rollAmount;
 
         float2 baseUv = fract(float2(uv.x + rowShift + waveShift, uv.y + roll));
         float rowDrift = (hash12(float2(row * 1.17, floor(time * 13.0))) - 0.5) * 0.010 * rowGate;
-        float drift = (sin((time * 3.0) + (uv.y * 24.0)) * 0.010) + (rowGate * 0.022) + rowDrift;
+        float drift = ((sin((time * 3.0) + (uv.y * 24.0)) * 0.010) + (rowGate * 0.022) + rowDrift) * rgbDriftAmount;
 
         float3 center = source.sample(linearSampler, baseUv).rgb;
         float red = source.sample(linearSampler, fract(baseUv + float2(drift, 0.0))).r;
@@ -285,28 +302,28 @@ enum ShaderSource {
         float blue = source.sample(linearSampler, fract(baseUv - float2(drift, 0.0))).b;
         float3 color = float3(red, green, blue);
 
-        float smearGate = rowGate * step(0.36, hash12(float2(row, floor(time * 11.0))));
+        float smearGate = rowGate * step(0.36, hash12(float2(row, floor(time * 11.0)))) * min(1.0, smearAmount);
         float3 smearColor = source.sample(linearSampler, fract(baseUv + float2(rowShift * 0.55 + drift * 2.2, 0.0))).rgb;
-        color = mix(color, smearColor, smearGate * 0.38);
+        color = mix(color, smearColor, smearGate * 0.38 * smearAmount);
 
-        float swapGate = step(0.978 - (pulse * 0.030), hash12(floor(uv * outputSize / 24.0) + floor(time * 7.0)));
+        float swapGate = step(0.978 - (pulse * 0.030 * colorSwapAmount), hash12(floor(uv * outputSize / 24.0) + floor(time * 7.0))) * min(1.0, colorSwapAmount);
         float swapKind = hash12(float2(row * 0.19, floor(time * 5.0)));
         float3 swappedA = color.gbr;
         float3 swappedB = color.brg;
-        color = mix(color, mix(swappedA, swappedB, step(0.5, swapKind)), swapGate * (0.34 + rowGate * 0.28));
+        color = mix(color, mix(swappedA, swappedB, step(0.5, swapKind)), swapGate * (0.34 + rowGate * 0.28) * colorSwapAmount);
 
         float lum = luminance(color);
-        float inversionGate = step(0.82, lum) * step(0.78 - (pulse * 0.18), hash12(floor(uv * outputSize / 18.0) + floor(time * 9.0)));
-        color = mix(color, 1.0 - color, inversionGate * (0.42 + (pulse * 0.38)));
+        float inversionGate = step(0.82, lum) * step(0.78 - (pulse * 0.18 * lumaInvertAmount), hash12(floor(uv * outputSize / 18.0) + floor(time * 9.0))) * min(1.0, lumaInvertAmount);
+        color = mix(color, 1.0 - color, inversionGate * (0.42 + (pulse * 0.38)) * lumaInvertAmount);
 
-        float rotGate = step(0.991 - (pulse * 0.040), hash12(float2(gid) + floor(time * 31.0)));
+        float rotGate = step(0.991 - (pulse * 0.040 * bitRotAmount), hash12(float2(gid) + floor(time * 31.0))) * min(1.0, bitRotAmount);
         uint3 bits = uint3(round(clamp(color, float3(0.0), float3(1.0)) * 255.0));
         uint3 bentBits = bits ^ uint3(0x1Au, 0x05u, 0x22u);
-        color = mix(color, float3(bentBits) / 255.0, rotGate * 0.72);
+        color = mix(color, float3(bentBits) / 255.0, rotGate * 0.72 * bitRotAmount);
 
-        float staticGate = step(0.996 - (pulse * 0.025), hash12(float2(gid.yx) + (time * 43.0)));
+        float staticGate = step(0.996 - (pulse * 0.025 * staticAmount), hash12(float2(gid.yx) + (time * 43.0))) * min(1.0, staticAmount);
         float staticValue = step(0.5, hash12(float2(gid) * 1.91 + floor(time * 60.0)));
-        color = mix(color, float3(staticValue), staticGate * 0.55);
+        color = mix(color, float3(staticValue), staticGate * 0.55 * staticAmount);
 
         float scan = 0.94 + (0.06 * sin((uv.y * outputSize.y * 3.14159) + (time * 12.0)));
         color *= scan;

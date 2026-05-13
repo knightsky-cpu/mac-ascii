@@ -18,6 +18,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         0.00, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00,
     ]
 
+    private struct BendControlMenuRow {
+        let id: CircuitBendControlID
+        let checkbox: NSButton
+        let slider: NSSlider
+        let valueLabel: NSTextField
+    }
+
     private let state = AppState()
     private var metalView: MTKView?
     private var window: OverlayWindow?
@@ -45,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var contrastSelectionMenu: NSMenu?
     private var gammaSelectionMenu: NSMenu?
     private var edgeSelectionMenu: NSMenu?
+    private var bendControlRows: [BendControlMenuRow] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -118,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusMenu()
 
         state.logState("started")
-        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+M render mode, Ctrl+Option+F fps, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up, Ctrl+Option+B brightness, Ctrl+Option+C contrast, Ctrl+Option+G gamma, Ctrl+Option+E edge")
+        print("MacAscii: hotkeys Ctrl+Option+A toggle, Ctrl+Option+. grid, Ctrl+Option+' style, Ctrl+Option+M render mode, Ctrl+Option+K open bend controls, Ctrl+Option+F fps, Ctrl+Option+, luminance, Ctrl+Option+- opacity down, Ctrl+Option+= opacity up, Ctrl+Option+B brightness, Ctrl+Option+C contrast, Ctrl+Option+G gamma, Ctrl+Option+E edge")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -208,6 +216,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.setSubmenu(renderModeSelectionMenu, for: selectRenderModeItem)
         menu.addItem(selectRenderModeItem)
+
+        let bendControlsItem = NSMenuItem(title: "Bend Controls", action: nil, keyEquivalent: "")
+        let bendControlsMenu = NSMenu(title: "Bend Controls")
+        bendControlRows.removeAll()
+        addBendControlRow("Row shred", .rowShred, to: bendControlsMenu)
+        addBendControlRow("RGB drift", .rgbDrift, to: bendControlsMenu)
+        addBendControlRow("Smear", .smear, to: bendControlsMenu)
+        addBendControlRow("Color swap", .colorSwap, to: bendControlsMenu)
+        addBendControlRow("Luma invert", .lumaInvert, to: bendControlsMenu)
+        addBendControlRow("Bit rot", .bitRot, to: bendControlsMenu)
+        addBendControlRow("Static noise", .staticNoise, to: bendControlsMenu)
+        addBendControlRow("V-sync roll", .vSyncRoll, to: bendControlsMenu)
+        menu.setSubmenu(bendControlsMenu, for: bendControlsItem)
+        menu.addItem(bendControlsItem)
 
         let toggleLuminanceItem = NSMenuItem(
             title: "Toggle 10/20 Luminance",
@@ -526,6 +548,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         finishStateChange(hudMessage: "Render: \(state.renderMode.name)")
     }
 
+    @objc private func toggleBendControlsFromMenu() {
+        handle(command: .toggleBendControls)
+    }
+
+    @objc private func bendControlToggleChanged(_ sender: NSButton) {
+        guard let id = CircuitBendControlID(rawValue: sender.tag) else {
+            return
+        }
+        state.setCircuitBendControl(id, enabled: sender.state == .on)
+        refreshBendControlRows()
+    }
+
+    @objc private func bendControlSliderChanged(_ sender: NSSlider) {
+        guard let id = CircuitBendControlID(rawValue: sender.tag) else {
+            return
+        }
+        state.setCircuitBendControl(id, amount: sender.floatValue)
+        refreshBendControlRows()
+    }
+
     @objc private func toggleLuminanceFromMenu() {
         handle(command: .toggleLuminance)
     }
@@ -671,6 +713,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state.cycleGamma()
         case .cycleEdgeStrength:
             state.cycleEdgeStrength()
+        case .toggleBendControls:
+            statusItem?.button?.performClick(nil)
         }
         finishStateChange(hudMessage: hudMessage(for: command))
     }
@@ -720,6 +764,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshFloatSelectionMenu(contrastSelectionMenu, currentValue: state.contrast)
         refreshFloatSelectionMenu(gammaSelectionMenu, currentValue: state.gamma)
         refreshFloatSelectionMenu(edgeSelectionMenu, currentValue: state.edgeStrength)
+        refreshBendControlRows()
     }
 
     private func hudMessage(for command: HotkeyManager.Command) -> String {
@@ -746,6 +791,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return String(format: "Gamma: %.2f", state.gamma)
         case .cycleEdgeStrength:
             return String(format: "Edge: %.2f", state.edgeStrength)
+        case .toggleBendControls:
+            return "Circuit Bend controls"
         }
     }
 
@@ -783,6 +830,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for item in menu?.items ?? [] {
             let value = (item.representedObject as? NSNumber)?.floatValue ?? .greatestFiniteMagnitude
             item.state = abs(value - currentValue) < 0.001 ? .on : .off
+        }
+    }
+
+    private func addBendControlRow(_ title: String, _ id: CircuitBendControlID, to menu: NSMenu) {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        row.frame = NSRect(x: 0, y: 0, width: 390, height: 34)
+
+        let checkbox = NSButton(checkboxWithTitle: title, target: self, action: #selector(bendControlToggleChanged(_:)))
+        checkbox.tag = id.rawValue
+        checkbox.widthAnchor.constraint(equalToConstant: 116).isActive = true
+
+        let slider = NSSlider(value: 1.0, minValue: 0.0, maxValue: 2.0, target: self, action: #selector(bendControlSliderChanged(_:)))
+        slider.tag = id.rawValue
+        slider.widthAnchor.constraint(equalToConstant: 190).isActive = true
+
+        let valueLabel = NSTextField(labelWithString: "1.00")
+        valueLabel.alignment = .right
+        valueLabel.widthAnchor.constraint(equalToConstant: 44).isActive = true
+
+        row.addArrangedSubview(checkbox)
+        row.addArrangedSubview(slider)
+        row.addArrangedSubview(valueLabel)
+
+        let item = NSMenuItem()
+        item.view = row
+        menu.addItem(item)
+        bendControlRows.append(BendControlMenuRow(id: id, checkbox: checkbox, slider: slider, valueLabel: valueLabel))
+    }
+
+    private func refreshBendControlRows() {
+        for row in bendControlRows {
+            let control = state.circuitBendControl(row.id)
+            row.checkbox.state = control.enabled ? .on : .off
+            row.slider.floatValue = control.amount
+            row.slider.isEnabled = control.enabled
+            row.valueLabel.stringValue = String(format: "%.2f", control.amount)
         }
     }
 
