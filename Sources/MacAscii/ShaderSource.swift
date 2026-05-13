@@ -602,6 +602,27 @@ enum ShaderSource {
         return float4(center, time - age, 1.0);
     }
 
+    float2 waterCursorDisturbance(float2 uv,
+                                  float2 point,
+                                  float active,
+                                  float weight,
+                                  float pixelRadius,
+                                  float2 outputSize,
+                                  float time) {
+        float aspect = outputSize.x / max(1.0, outputSize.y);
+        float radius = pixelRadius / max(1.0, min(outputSize.x, outputSize.y));
+        float2 delta = uv - point;
+        delta.x *= aspect;
+        float dist = length(delta);
+        float influence = (1.0 - smoothstep(0.0, radius, dist)) * active * weight;
+
+        float2 direction = normalize(delta + float2(0.0001));
+        direction.x /= aspect;
+        float pull = influence * influence * 0.018;
+        float ripple = sin((dist * 118.0) - (time * 4.4)) * influence * 0.0032;
+        return direction * (pull + ripple);
+    }
+
     kernel void compute_water_bend(texture2d<float, access::sample> source [[texture(0)]],
                                    texture2d<float, access::write> output [[texture(1)]],
                                    constant Uniforms& uniforms [[buffer(0)]],
@@ -623,6 +644,33 @@ enum ShaderSource {
         displacement += waterRippleDisplacement(uv, uniforms.waterRipple7, outputSize, uniforms.time, 1.0);
         displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 8.6, 0.4, 17.0), outputSize, uniforms.time, 0.20);
         displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 13.2, 4.8, 73.0), outputSize, uniforms.time, 0.12);
+        if (uniforms.mousePadding > 1.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mousePosition, uniforms.mouseActive, 0.74, 72.0, outputSize, uniforms.time);
+        }
+        if (uniforms.mousePadding > 2.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail1, uniforms.mouseActive, 0.50, 64.0, outputSize, uniforms.time - 0.03);
+        }
+        if (uniforms.mousePadding > 3.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail2, uniforms.mouseActive, 0.34, 56.0, outputSize, uniforms.time - 0.06);
+        }
+        if (uniforms.mousePadding > 4.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail3, uniforms.mouseActive, 0.20, 48.0, outputSize, uniforms.time - 0.09);
+        }
+        if (uniforms.mousePadding > 5.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail4, uniforms.mouseActive, 0.11, 40.0, outputSize, uniforms.time - 0.12);
+        }
+        if (uniforms.mousePadding > 6.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail5, uniforms.mouseActive, 0.075, 36.0, outputSize, uniforms.time - 0.15);
+        }
+        if (uniforms.mousePadding > 7.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail6, uniforms.mouseActive, 0.050, 32.0, outputSize, uniforms.time - 0.18);
+        }
+        if (uniforms.mousePadding > 8.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail7, uniforms.mouseActive, 0.032, 29.0, outputSize, uniforms.time - 0.21);
+        }
+        if (uniforms.mousePadding > 9.5) {
+            displacement += waterCursorDisturbance(uv, uniforms.mouseTrail8, uniforms.mouseActive, 0.020, 26.0, outputSize, uniforms.time - 0.24);
+        }
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
         float3 color = source.sample(linearSampler, sampleUv).rgb;
