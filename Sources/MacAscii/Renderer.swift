@@ -27,6 +27,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let displayScale: Float
     private let lock = NSLock()
     private var latestPixelBuffer: CVPixelBuffer?
+    private var glyphAtlas: GlyphAtlas?
+    private var didAttemptGlyphAtlas = false
     private var startedAt = CFAbsoluteTimeGetCurrent()
     private var didLogRenderState = false
 
@@ -94,6 +96,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         let renderState = state.sanitizedRenderState()
+        if renderState.renderMode == 7 {
+            prepareGlyphAtlasIfNeeded()
+        }
+
         let viewportSize = SIMD2(
             Float(view.drawableSize.width) / max(1.0, displayScale),
             Float(view.drawableSize.height) / max(1.0, displayScale)
@@ -166,5 +172,19 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         return CVMetalTextureGetTexture(cvTexture)
+    }
+
+    private func prepareGlyphAtlasIfNeeded() {
+        guard glyphAtlas == nil, !didAttemptGlyphAtlas else {
+            return
+        }
+
+        didAttemptGlyphAtlas = true
+        if let atlas = GlyphAtlas.make(device: device) {
+            glyphAtlas = atlas
+            print("MacAscii: true-ascii glyph atlas ready glyphs=\(atlas.glyphCount)")
+        } else {
+            print("MacAscii: true-ascii glyph atlas unavailable")
+        }
     }
 }
