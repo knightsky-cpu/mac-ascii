@@ -21,6 +21,9 @@ enum ShaderSource {
         float gamma;
         float edgeStrength;
         float time;
+        float2 mousePosition;
+        float mouseActive;
+        float mousePadding;
     };
 
     vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
@@ -295,13 +298,46 @@ enum ShaderSource {
         output.write(float4(clamp(color, float3(0.0), float3(1.0)), 1.0), gid);
     }
 
+    kernel void compute_input_bend(texture2d<float, access::sample> source [[texture(0)]],
+                                   texture2d<float, access::write> output [[texture(1)]],
+                                   constant Uniforms& uniforms [[buffer(0)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
+        if (gid.x >= output.get_width() || gid.y >= output.get_height()) {
+            return;
+        }
+
+        float2 outputSize = float2(float(output.get_width()), float(output.get_height()));
+        float2 uv = (float2(gid) + float2(0.5)) / outputSize;
+        float2 mouse = clamp(uniforms.mousePosition, float2(0.0), float2(1.0));
+        float active = clamp(uniforms.mouseActive, 0.0, 1.0);
+
+        float2 delta = uv - mouse;
+        delta.x *= outputSize.x / max(1.0, outputSize.y);
+        float dist = length(delta);
+        float radius = 0.165;
+        float influence = (1.0 - smoothstep(0.0, radius, dist)) * active;
+        float ring = smoothstep(radius, radius * 0.72, dist) * smoothstep(radius * 0.34, radius * 0.78, dist) * active;
+
+        float2 direction = normalize(delta + float2(0.0001));
+        direction.x /= outputSize.x / max(1.0, outputSize.y);
+        float pull = influence * influence * 0.040;
+        float ripple = sin((dist * 84.0) - (uniforms.time * 5.0)) * influence * 0.004;
+        float2 sampleUv = clamp(uv - (direction * (pull + ripple)), float2(0.0), float2(1.0));
+
+        float3 color = source.sample(linearSampler, sampleUv).rgb;
+        float edgeLift = ring * 0.035;
+        color = clamp(color + edgeLift, float3(0.0), float3(1.0));
+
+        output.write(float4(color, 1.0), gid);
+    }
+
     fragment float4 fragment_ascii(VertexOut in [[stage_in]],
                                   texture2d<float> source [[texture(0)]],
                                   texture2d<float> glyphAtlas [[texture(1)]],
                                   texture2d<uint> cellMap [[texture(2)]],
                                   constant Uniforms& uniforms [[buffer(0)]]) {
         float2 uv = clamp(in.uv, float2(0.0), float2(1.0));
-        if (uniforms.renderMode == 9) {
+        if (uniforms.renderMode == 9 || uniforms.renderMode == 10) {
             return float4(source.sample(linearSampler, uv).rgb, clamp(uniforms.opacity, 0.10, 1.0));
         }
 

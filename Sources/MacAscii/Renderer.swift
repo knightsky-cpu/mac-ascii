@@ -1,3 +1,4 @@
+import CoreGraphics
 import CoreVideo
 import Metal
 import MetalKit
@@ -16,6 +17,9 @@ private struct Uniforms {
     var gamma: Float
     var edgeStrength: Float
     var time: Float
+    var mousePosition: SIMD2<Float>
+    var mouseActive: Float
+    var mousePadding: Float
 }
 
 final class Renderer: NSObject, MTKViewDelegate {
@@ -24,6 +28,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let pipelineState: MTLRenderPipelineState
     private let computePipelineState: MTLComputePipelineState?
     private let circuitBendPipelineState: MTLComputePipelineState?
+    private let inputBendPipelineState: MTLComputePipelineState?
     private let textureCache: CVMetalTextureCache
     private let dummyCellMapTexture: MTLTexture
     private let state: AppState
@@ -74,6 +79,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                 circuitBendPipelineState = try? device.makeComputePipelineState(function: circuitFunction)
             } else {
                 circuitBendPipelineState = nil
+            }
+            if let inputFunction = library.makeFunction(name: "compute_input_bend") {
+                inputBendPipelineState = try? device.makeComputePipelineState(function: inputFunction)
+            } else {
+                inputBendPipelineState = nil
             }
         } catch {
             print("MacAscii: failed to build Metal pipeline \(error)")
@@ -131,6 +141,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             Float(view.drawableSize.height) / max(1.0, displayScale)
         )
         let sourceSize = SIMD2(Float(sourceTexture.width), Float(sourceTexture.height))
+        let mouseState = normalizedMousePosition()
 
         if !didLogRenderState {
             print(
@@ -182,7 +193,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             contrast: renderState.contrast,
             gamma: renderState.gamma,
             edgeStrength: renderState.edgeStrength,
-            time: Float(CFAbsoluteTimeGetCurrent() - startedAt)
+            time: Float(CFAbsoluteTimeGetCurrent() - startedAt),
+            mousePosition: mouseState.position,
+            mouseActive: mouseState.active,
+            mousePadding: 0
         )
 
         if (shaderRenderMode == 7 || shaderRenderMode == 8), let activeCellMap {
@@ -194,10 +208,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             )
         }
 
-        if shaderRenderMode == 9,
+        if (shaderRenderMode == 9 || shaderRenderMode == 10),
            let bentTexture = ensureBentOutputTexture(width: sourceTexture.width, height: sourceTexture.height),
-           circuitBendPipelineState != nil {
-            encodeCircuitBend(
+           bendPipelineState(for: shaderRenderMode) != nil {
+            encodeBendOutput(
                 commandBuffer: commandBuffer,
                 sourceTexture: sourceTexture,
                 outputTexture: bentTexture,
@@ -274,6 +288,42 @@ final class Renderer: NSObject, MTKViewDelegate {
         return bentOutputTexture
     }
 
+    private func normalizedMousePosition() -> (position: SIMD2<Float>, active: Float) {
+        guard let event = CGEvent(source: nil) else {
+            return (SIMD2<Float>(0.5, 0.5), 0)
+        }
+
+        let bounds = CGDisplayBounds(CGMainDisplayID())
+        guard bounds.width > 0, bounds.height > 0 else {
+            return (SIMD2<Float>(0.5, 0.5), 0)
+        }
+
+        let mouse = event.location
+        guard bounds.contains(mouse) else {
+            return (SIMD2<Float>(0.5, 0.5), 0)
+        }
+
+        let x = Float((mouse.x - bounds.minX) / bounds.width)
+        let y = Float((mouse.y - bounds.minY) / bounds.height)
+        return (
+            SIMD2<Float>(
+                min(1.0, max(0.0, x)),
+                min(1.0, max(0.0, y))
+            ),
+            1
+        )
+    }
+
+    private func bendPipelineState(for renderMode: Int32) -> MTLComputePipelineState? {
+        if renderMode == 9 {
+            return circuitBendPipelineState
+        }
+        if renderMode == 10 {
+            return inputBendPipelineState
+        }
+        return nil
+    }
+
     private static func makeCellMapTexture(device: MTLDevice, width: Int, height: Int) -> MTLTexture? {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .rgba32Uint,
@@ -307,18 +357,18 @@ final class Renderer: NSObject, MTKViewDelegate {
         computeEncoder.endEncoding()
     }
 
-    private func encodeCircuitBend(
+    private func encodeBendOutput(
         commandBuffer: MTLCommandBuffer,
         sourceTexture: MTLTexture,
         outputTexture: MTLTexture,
         uniforms: inout Uniforms
     ) {
-        guard let circuitBendPipelineState,
+        guard let pipelineState = bendPipelineState(for: uniforms.renderMode),
               let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
             return
         }
 
-        computeEncoder.setComputePipelineState(circuitBendPipelineState)
+        computeEncoder.setComputePipelineState(pipelineState)
         computeEncoder.setTexture(sourceTexture, index: 0)
         computeEncoder.setTexture(outputTexture, index: 1)
         computeEncoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
