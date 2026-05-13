@@ -16,9 +16,7 @@ enum LuminanceMode: String, CaseIterable {
 
 enum RenderMode: String, CaseIterable {
     case trueAscii
-    case ascii
     case trueBlockyRetro
-    case blockyRetro
     case matrixRain
     case cyberpunk
 
@@ -26,12 +24,8 @@ enum RenderMode: String, CaseIterable {
         switch self {
         case .trueAscii:
             return "true-ascii"
-        case .ascii:
-            return "ascii"
         case .trueBlockyRetro:
             return "true-blocky-retro"
-        case .blockyRetro:
-            return "blocky-retro"
         case .matrixRain:
             return "matrix-rain"
         case .cyberpunk:
@@ -43,12 +37,8 @@ enum RenderMode: String, CaseIterable {
         switch self {
         case .trueAscii:
             return 7
-        case .ascii:
-            return 0
         case .trueBlockyRetro:
             return 8
-        case .blockyRetro:
-            return 1
         case .matrixRain:
             return 5
         case .cyberpunk:

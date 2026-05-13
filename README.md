@@ -101,11 +101,8 @@ thermal-edge
 Render modes:
 
 ```text
-ascii
-blocky-retro
-halftone
-crt-pixel
-mosaic
+true-ascii
+true-blocky-retro
 matrix-rain
 cyberpunk
 ```
