@@ -257,13 +257,24 @@ enum ShaderSource {
         float roll = pulse * 0.18;
 
         float2 baseUv = fract(float2(uv.x + rowShift + waveShift, uv.y + roll));
-        float drift = (sin((time * 3.0) + (uv.y * 24.0)) * 0.006) + (rowGate * 0.012);
+        float rowDrift = (hash12(float2(row * 1.17, floor(time * 13.0))) - 0.5) * 0.010 * rowGate;
+        float drift = (sin((time * 3.0) + (uv.y * 24.0)) * 0.010) + (rowGate * 0.022) + rowDrift;
 
         float3 center = source.sample(linearSampler, baseUv).rgb;
         float red = source.sample(linearSampler, fract(baseUv + float2(drift, 0.0))).r;
         float green = center.g;
         float blue = source.sample(linearSampler, fract(baseUv - float2(drift, 0.0))).b;
         float3 color = float3(red, green, blue);
+
+        float smearGate = rowGate * step(0.36, hash12(float2(row, floor(time * 11.0))));
+        float3 smearColor = source.sample(linearSampler, fract(baseUv + float2(rowShift * 0.55 + drift * 2.2, 0.0))).rgb;
+        color = mix(color, smearColor, smearGate * 0.38);
+
+        float swapGate = step(0.978 - (pulse * 0.030), hash12(floor(uv * outputSize / 24.0) + floor(time * 7.0)));
+        float swapKind = hash12(float2(row * 0.19, floor(time * 5.0)));
+        float3 swappedA = color.gbr;
+        float3 swappedB = color.brg;
+        color = mix(color, mix(swappedA, swappedB, step(0.5, swapKind)), swapGate * (0.34 + rowGate * 0.28));
 
         float lum = luminance(color);
         float inversionGate = step(0.82, lum) * step(0.78 - (pulse * 0.18), hash12(floor(uv * outputSize / 18.0) + floor(time * 9.0)));
