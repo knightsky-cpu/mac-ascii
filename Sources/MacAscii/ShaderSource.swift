@@ -32,6 +32,14 @@ enum ShaderSource {
         float2 mouseTrail5;
         float2 mouseTrail6;
         float2 mouseTrail7;
+        float2 mouseTrail8;
+        float2 mouseTrail9;
+        float2 mouseTrail10;
+        float2 mouseTrail11;
+        float2 mouseTrail12;
+        float2 mouseTrail13;
+        float2 mouseTrail14;
+        float2 mouseTrail15;
     };
 
     vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
@@ -361,6 +369,30 @@ enum ShaderSource {
         }
         if (trailCount > 7.5) {
             displacement += inputBendDisplacement(uv, uniforms.mouseTrail7, active, 0.08, 0.098, outputSize, uniforms.time - 0.14);
+        }
+        if (trailCount > 8.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail8, active, 0.055, 0.090, outputSize, uniforms.time - 0.16);
+        }
+        if (trailCount > 9.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail9, active, 0.040, 0.083, outputSize, uniforms.time - 0.18);
+        }
+        if (trailCount > 10.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail10, active, 0.030, 0.076, outputSize, uniforms.time - 0.20);
+        }
+        if (trailCount > 11.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail11, active, 0.022, 0.070, outputSize, uniforms.time - 0.22);
+        }
+        if (trailCount > 12.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail12, active, 0.016, 0.064, outputSize, uniforms.time - 0.24);
+        }
+        if (trailCount > 13.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail13, active, 0.011, 0.058, outputSize, uniforms.time - 0.26);
+        }
+        if (trailCount > 14.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail14, active, 0.007, 0.052, outputSize, uniforms.time - 0.28);
+        }
+        if (trailCount > 15.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail15, active, 0.004, 0.047, outputSize, uniforms.time - 0.30);
         }
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));

@@ -28,6 +28,14 @@ private struct Uniforms {
     var mouseTrail5: SIMD2<Float>
     var mouseTrail6: SIMD2<Float>
     var mouseTrail7: SIMD2<Float>
+    var mouseTrail8: SIMD2<Float>
+    var mouseTrail9: SIMD2<Float>
+    var mouseTrail10: SIMD2<Float>
+    var mouseTrail11: SIMD2<Float>
+    var mouseTrail12: SIMD2<Float>
+    var mouseTrail13: SIMD2<Float>
+    var mouseTrail14: SIMD2<Float>
+    var mouseTrail15: SIMD2<Float>
 }
 
 final class Renderer: NSObject, MTKViewDelegate {
@@ -46,7 +54,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var glyphAtlas: GlyphAtlas?
     private var cellMapTexture: MTLTexture?
     private var bentOutputTexture: MTLTexture?
-    private var mouseTrail = Array(repeating: SIMD2<Float>(0.5, 0.5), count: 8)
+    private var mouseTrail = Array(repeating: SIMD2<Float>(0.5, 0.5), count: 16)
     private var mouseTrailCount = 0
     private var lastMouseTrailSampleTime: Float = 0
     private var didAttemptGlyphAtlas = false
@@ -217,7 +225,15 @@ final class Renderer: NSObject, MTKViewDelegate {
             mouseTrail4: mouseTrail[4],
             mouseTrail5: mouseTrail[5],
             mouseTrail6: mouseTrail[6],
-            mouseTrail7: mouseTrail[7]
+            mouseTrail7: mouseTrail[7],
+            mouseTrail8: mouseTrail[8],
+            mouseTrail9: mouseTrail[9],
+            mouseTrail10: mouseTrail[10],
+            mouseTrail11: mouseTrail[11],
+            mouseTrail12: mouseTrail[12],
+            mouseTrail13: mouseTrail[13],
+            mouseTrail14: mouseTrail[14],
+            mouseTrail15: mouseTrail[15]
         )
 
         if (shaderRenderMode == 7 || shaderRenderMode == 8), let activeCellMap {
