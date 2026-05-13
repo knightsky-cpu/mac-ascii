@@ -355,9 +355,44 @@ enum ShaderSource {
 
         float2 direction = normalize(delta + float2(0.0001));
         direction.x /= aspect;
-        float pull = influence * influence * 0.040;
-        float ripple = sin((dist * 84.0) - (time * 5.0)) * influence * 0.004;
+        float pull = influence * influence * 0.030;
+        float ripple = sin((dist * 84.0) - (time * 5.0)) * influence * 0.0022;
         return direction * (pull + ripple);
+    }
+
+    float2 inputMotionWake(float2 uv,
+                           float2 point,
+                           float2 previousPoint,
+                           float active,
+                           float2 outputSize,
+                           float time) {
+        float aspect = outputSize.x / max(1.0, outputSize.y);
+        float2 motion = point - previousPoint;
+        motion.x *= aspect;
+        float motionLength = length(motion);
+        float motionAmount = smoothstep(0.008, 0.034, motionLength) * active;
+        if (motionAmount < 0.01) {
+            return float2(0.0);
+        }
+
+        float2 normalizedMotion = normalize(motion + float2(0.0001));
+        float2 motionDirection = normalizedMotion;
+        float2 normal = float2(-motionDirection.y, motionDirection.x);
+        normal.x /= aspect;
+        motionDirection.x /= aspect;
+
+        float2 delta = uv - point;
+        delta.x *= aspect;
+        float along = dot(delta, normalizedMotion);
+        float across = dot(delta, float2(-normalizedMotion.y, normalizedMotion.x));
+        float dist = length(delta);
+        float wake = smoothstep(0.00, 0.11, -along) *
+                     (1.0 - smoothstep(0.02, 0.21, dist));
+        float phase = hash12(floor(point * 64.0)) * 6.283185;
+        float wakeSpeed = mix(3.6, 5.2, hash12(floor((point + previousPoint) * 48.0)));
+        float drift = 0.82 + (0.18 * sin((time * 0.73) + phase));
+        float wave = sin((-along * 82.0) + (abs(across) * 17.0) - (time * wakeSpeed) + phase);
+        return ((normal * wave * 0.00115) + (motionDirection * wave * 0.00035)) * wake * motionAmount * drift;
     }
 
     kernel void compute_input_bend_trail_state(texture2d<float, access::read> previousState [[texture(0)]],
@@ -385,9 +420,9 @@ enum ShaderSource {
 
         float2 direction = normalize(delta + float2(0.0001));
         direction.x /= aspect;
-        float2 freshDisplacement = direction * influence * influence * 0.022;
+        float2 freshDisplacement = direction * influence * influence * 0.016;
         state.xy += freshDisplacement;
-        state.xy = clamp(state.xy, float2(-0.045), float2(0.045));
+        state.xy = clamp(state.xy, float2(-0.035), float2(0.035));
         state.z = max(state.z, influence);
 
         if (state.z < 0.004) {
@@ -415,6 +450,7 @@ enum ShaderSource {
         float2 displacement = inputBendDisplacement(uv, mouse, active, 1.0, 0.165, outputSize, uniforms.time);
         if (trailCount > 1.5) {
             displacement += inputBendDisplacement(uv, uniforms.mouseTrail1, active, 0.90, 0.156, outputSize, uniforms.time - 0.02);
+            displacement += inputMotionWake(uv, mouse, uniforms.mouseTrail1, active, outputSize, uniforms.time);
         }
         if (trailCount > 2.5) {
             displacement += inputBendDisplacement(uv, uniforms.mouseTrail2, active, 0.74, 0.148, outputSize, uniforms.time - 0.04);
@@ -460,11 +496,17 @@ enum ShaderSource {
         }
 
         float4 feedback = trailState.sample(linearSampler, uv);
-        displacement += feedback.xy * clamp(0.70 + feedback.z, 0.0, 1.25);
+        displacement += feedback.xy * clamp(0.55 + feedback.z, 0.0, 1.10);
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
 
         float3 color = source.sample(linearSampler, sampleUv).rgb;
+        float displacementAmount = smoothstep(0.002, 0.030, length(displacement));
+        float2 lightDirection = normalize(float2(-0.42, 0.91));
+        float relief = dot(normalize(displacement + float2(0.0001)), lightDirection);
+        float shade = relief * displacementAmount * 0.055;
+        float rim = smoothstep(0.10, 0.55, feedback.z) * 0.018;
+        color = clamp(color * (1.0 + shade + rim), float3(0.0), float3(1.0));
 
         output.write(float4(color, 1.0), gid);
     }
