@@ -45,6 +45,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let computePipelineState: MTLComputePipelineState?
     private let circuitBendPipelineState: MTLComputePipelineState?
     private let inputBendPipelineState: MTLComputePipelineState?
+    private let inputBendTrailPipelineState: MTLComputePipelineState?
     private let textureCache: CVMetalTextureCache
     private let dummyCellMapTexture: MTLTexture
     private let state: AppState
@@ -54,6 +55,10 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var glyphAtlas: GlyphAtlas?
     private var cellMapTexture: MTLTexture?
     private var bentOutputTexture: MTLTexture?
+    private var inputTrailTextureA: MTLTexture?
+    private var inputTrailTextureB: MTLTexture?
+    private var inputTrailReadTexture: MTLTexture?
+    private var inputTrailWriteTexture: MTLTexture?
     private var mouseTrail = Array(repeating: SIMD2<Float>(0.5, 0.5), count: 16)
     private var mouseTrailCount = 0
     private var lastMouseTrailSampleTime: Float = 0
@@ -103,6 +108,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                 inputBendPipelineState = try? device.makeComputePipelineState(function: inputFunction)
             } else {
                 inputBendPipelineState = nil
+            }
+            if let inputTrailFunction = library.makeFunction(name: "compute_input_bend_trail_state") {
+                inputBendTrailPipelineState = try? device.makeComputePipelineState(function: inputTrailFunction)
+            } else {
+                inputBendTrailPipelineState = nil
             }
         } catch {
             print("MacAscii: failed to build Metal pipeline \(error)")
@@ -200,6 +210,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             activeGlyphAtlas = nil
             activeCellMap = nil
         }
+        if shaderRenderMode != 10 {
+            resetInputTrailTextures()
+        }
         var activeSourceTexture = sourceTexture
 
         var uniforms = Uniforms(
@@ -245,13 +258,34 @@ final class Renderer: NSObject, MTKViewDelegate {
             )
         }
 
-        if (shaderRenderMode == 9 || shaderRenderMode == 10),
+        if shaderRenderMode == 10,
+           let bentTexture = ensureBentOutputTexture(width: sourceTexture.width, height: sourceTexture.height),
+           let trailTextures = ensureInputTrailTextures(width: sourceTexture.width, height: sourceTexture.height),
+           inputBendPipelineState != nil,
+           inputBendTrailPipelineState != nil {
+            encodeInputBendTrailState(
+                commandBuffer: commandBuffer,
+                readTexture: trailTextures.read,
+                writeTexture: trailTextures.write,
+                uniforms: &uniforms
+            )
+            encodeBendOutput(
+                commandBuffer: commandBuffer,
+                sourceTexture: sourceTexture,
+                outputTexture: bentTexture,
+                trailTexture: trailTextures.write,
+                uniforms: &uniforms
+            )
+            swapInputTrailTextures()
+            activeSourceTexture = bentTexture
+        } else if shaderRenderMode == 9,
            let bentTexture = ensureBentOutputTexture(width: sourceTexture.width, height: sourceTexture.height),
            bendPipelineState(for: shaderRenderMode) != nil {
             encodeBendOutput(
                 commandBuffer: commandBuffer,
                 sourceTexture: sourceTexture,
                 outputTexture: bentTexture,
+                trailTexture: nil,
                 uniforms: &uniforms
             )
             activeSourceTexture = bentTexture
@@ -323,6 +357,63 @@ final class Renderer: NSObject, MTKViewDelegate {
         descriptor.usage = [.shaderRead, .shaderWrite]
         bentOutputTexture = device.makeTexture(descriptor: descriptor)
         return bentOutputTexture
+    }
+
+    private func ensureInputTrailTextures(width: Int, height: Int) -> (read: MTLTexture, write: MTLTexture)? {
+        if let read = inputTrailReadTexture,
+           let write = inputTrailWriteTexture,
+           read.width == width,
+           read.height == height,
+           write.width == width,
+           write.height == height {
+            return (read, write)
+        }
+
+        guard let textureA = Self.makeInputTrailTexture(device: device, width: width, height: height),
+              let textureB = Self.makeInputTrailTexture(device: device, width: width, height: height) else {
+            return nil
+        }
+
+        zeroTrailTexture(textureA)
+        zeroTrailTexture(textureB)
+        inputTrailTextureA = textureA
+        inputTrailTextureB = textureB
+        inputTrailReadTexture = textureA
+        inputTrailWriteTexture = textureB
+        return (textureA, textureB)
+    }
+
+    private static func makeInputTrailTexture(device: MTLDevice, width: Int, height: Int) -> MTLTexture? {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        return device.makeTexture(descriptor: descriptor)
+    }
+
+    private func zeroTrailTexture(_ texture: MTLTexture) {
+        let bytesPerRow = texture.width * 4 * MemoryLayout<UInt16>.stride
+        let zeros = [UInt16](repeating: 0, count: texture.width * texture.height * 4)
+        texture.replace(
+            region: MTLRegionMake2D(0, 0, texture.width, texture.height),
+            mipmapLevel: 0,
+            withBytes: zeros,
+            bytesPerRow: bytesPerRow
+        )
+    }
+
+    private func swapInputTrailTextures() {
+        swap(&inputTrailReadTexture, &inputTrailWriteTexture)
+    }
+
+    private func resetInputTrailTextures() {
+        inputTrailTextureA = nil
+        inputTrailTextureB = nil
+        inputTrailReadTexture = nil
+        inputTrailWriteTexture = nil
     }
 
     private func normalizedMousePosition() -> (position: SIMD2<Float>, active: Float) {
@@ -418,6 +509,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         commandBuffer: MTLCommandBuffer,
         sourceTexture: MTLTexture,
         outputTexture: MTLTexture,
+        trailTexture: MTLTexture?,
         uniforms: inout Uniforms
     ) {
         guard let pipelineState = bendPipelineState(for: uniforms.renderMode),
@@ -428,10 +520,33 @@ final class Renderer: NSObject, MTKViewDelegate {
         computeEncoder.setComputePipelineState(pipelineState)
         computeEncoder.setTexture(sourceTexture, index: 0)
         computeEncoder.setTexture(outputTexture, index: 1)
+        computeEncoder.setTexture(trailTexture, index: 2)
         computeEncoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
 
         let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
         let threadsPerGrid = MTLSize(width: outputTexture.width, height: outputTexture.height, depth: 1)
+        computeEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        computeEncoder.endEncoding()
+    }
+
+    private func encodeInputBendTrailState(
+        commandBuffer: MTLCommandBuffer,
+        readTexture: MTLTexture,
+        writeTexture: MTLTexture,
+        uniforms: inout Uniforms
+    ) {
+        guard let inputBendTrailPipelineState,
+              let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
+            return
+        }
+
+        computeEncoder.setComputePipelineState(inputBendTrailPipelineState)
+        computeEncoder.setTexture(readTexture, index: 0)
+        computeEncoder.setTexture(writeTexture, index: 1)
+        computeEncoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
+
+        let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
+        let threadsPerGrid = MTLSize(width: writeTexture.width, height: writeTexture.height, depth: 1)
         computeEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
         computeEncoder.endEncoding()
     }

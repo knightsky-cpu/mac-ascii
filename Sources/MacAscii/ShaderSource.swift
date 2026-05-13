@@ -334,8 +334,46 @@ enum ShaderSource {
         return direction * (pull + ripple);
     }
 
+    kernel void compute_input_bend_trail_state(texture2d<float, access::read> previousState [[texture(0)]],
+                                               texture2d<float, access::write> nextState [[texture(1)]],
+                                               constant Uniforms& uniforms [[buffer(0)]],
+                                               uint2 gid [[thread_position_in_grid]]) {
+        if (gid.x >= nextState.get_width() || gid.y >= nextState.get_height()) {
+            return;
+        }
+
+        float2 outputSize = float2(float(nextState.get_width()), float(nextState.get_height()));
+        float2 uv = (float2(gid) + float2(0.5)) / outputSize;
+        float4 state = previousState.read(gid);
+        state.xy *= 0.90;
+        state.z *= 0.90;
+
+        float active = clamp(uniforms.mouseActive, 0.0, 1.0);
+        float2 mouse = clamp(uniforms.mousePosition, float2(0.0), float2(1.0));
+        float aspect = outputSize.x / max(1.0, outputSize.y);
+        float2 delta = uv - mouse;
+        delta.x *= aspect;
+        float dist = length(delta);
+        float radius = 0.125;
+        float influence = (1.0 - smoothstep(0.0, radius, dist)) * active;
+
+        float2 direction = normalize(delta + float2(0.0001));
+        direction.x /= aspect;
+        float2 freshDisplacement = direction * influence * influence * 0.022;
+        state.xy += freshDisplacement;
+        state.xy = clamp(state.xy, float2(-0.045), float2(0.045));
+        state.z = max(state.z, influence);
+
+        if (state.z < 0.004) {
+            state = float4(0.0);
+        }
+
+        nextState.write(float4(state.xyz, 0.0), gid);
+    }
+
     kernel void compute_input_bend(texture2d<float, access::sample> source [[texture(0)]],
                                    texture2d<float, access::write> output [[texture(1)]],
+                                   texture2d<float, access::sample> trailState [[texture(2)]],
                                    constant Uniforms& uniforms [[buffer(0)]],
                                    uint2 gid [[thread_position_in_grid]]) {
         if (gid.x >= output.get_width() || gid.y >= output.get_height()) {
@@ -394,6 +432,9 @@ enum ShaderSource {
         if (trailCount > 15.5) {
             displacement += inputBendDisplacement(uv, uniforms.mouseTrail15, active, 0.004, 0.047, outputSize, uniforms.time - 0.30);
         }
+
+        float4 feedback = trailState.sample(linearSampler, uv);
+        displacement += feedback.xy * clamp(0.70 + feedback.z, 0.0, 1.25);
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
 

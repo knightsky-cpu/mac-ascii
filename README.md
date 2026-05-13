@@ -106,7 +106,7 @@ true-blocky-retro
 matrix-rain
 cyberpunk
 circuit-bend
-input-bend
+liquid-input
 ```
 
 Grid sizes:

@@ -35,7 +35,7 @@ enum RenderMode: String, CaseIterable {
         case .circuitBend:
             return "circuit-bend"
         case .inputBend:
-            return "input-bend"
+            return "liquid-input"
         }
     }
 
