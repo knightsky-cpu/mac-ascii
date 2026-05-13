@@ -123,8 +123,18 @@ enum ShaderSource {
         float lumRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, 0.0), float2(0.0), float2(1.0))).rgb);
         float lumTop = luminance(source.sample(linearSampler, clamp(cellUv + float2(0.0, -texel.y), float2(0.0), float2(1.0))).rgb);
         float lumBottom = luminance(source.sample(linearSampler, clamp(cellUv + float2(0.0, texel.y), float2(0.0), float2(1.0))).rgb);
-        float gradientX = lumRight - lumLeft;
-        float gradientY = lumBottom - lumTop;
+        float lumTopLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumTopRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottomLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottomRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
+        float localMean = (
+            lumTopLeft + lumTop + lumTopRight +
+            lumLeft + lum + lumRight +
+            lumBottomLeft + lumBottom + lumBottomRight
+        ) / 9.0;
+        float dogContrast = clamp(abs(lum - localMean) * 4.0, 0.0, 1.0);
+        float gradientX = (lumTopRight + (2.0 * lumRight) + lumBottomRight) - (lumTopLeft + (2.0 * lumLeft) + lumBottomLeft);
+        float gradientY = (lumBottomLeft + (2.0 * lumBottom) + lumBottomRight) - (lumTopLeft + (2.0 * lumTop) + lumTopRight);
         float gradientMagnitude = length(float2(gradientX, gradientY));
         float absX = abs(gradientX);
         float absY = abs(gradientY);
@@ -418,9 +428,11 @@ enum ShaderSource {
         if (uniforms.renderMode == 7) {
             uint bucketIndex = uint(clamp(bucket, 0.0, float(uniforms.luminanceBuckets - 1)));
             uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
-            float trueAsciiEdgeConfidence = rawEdgeStrength * directionCoherence;
+            float dogGate = smoothstep(0.018, 0.085, dogContrast);
+            float trueAsciiGradientEdge = smoothstep(0.30, 0.88, gradientMagnitude);
+            float trueAsciiEdgeConfidence = trueAsciiGradientEdge * mix(0.58, 1.0, dogGate) * directionCoherence;
             bool trueAsciiDiagonal = diagonalEdge > 0.5;
-            float trueAsciiEdgeThreshold = trueAsciiDiagonal ? 0.54 : 0.36;
+            float trueAsciiEdgeThreshold = trueAsciiDiagonal ? 0.48 : 0.28;
             if (trueAsciiEdgeConfidence >= trueAsciiEdgeThreshold) {
                 if (absX > absY * 1.40) {
                     glyphIndex = 21; // |
