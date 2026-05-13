@@ -126,12 +126,23 @@ final class Renderer: NSObject, MTKViewDelegate {
             didLogRenderState = true
         }
 
+        var shaderRenderMode = renderState.renderMode
+        let activeGlyphAtlas: GlyphAtlas?
+        if renderState.renderMode == 7 {
+            activeGlyphAtlas = glyphAtlas
+            if activeGlyphAtlas == nil {
+                shaderRenderMode = 0
+            }
+        } else {
+            activeGlyphAtlas = nil
+        }
+
         var uniforms = Uniforms(
             viewportSize: viewportSize,
             sourceSize: sourceSize,
             cellSize: renderState.cellSize,
             styleMode: renderState.styleMode,
-            renderMode: renderState.renderMode,
+            renderMode: shaderRenderMode,
             luminanceBuckets: renderState.luminanceBuckets,
             opacity: renderState.opacity,
             brightness: renderState.brightness,
@@ -143,6 +154,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentTexture(sourceTexture, index: 0)
+        encoder.setFragmentTexture(activeGlyphAtlas?.texture ?? sourceTexture, index: 1)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()

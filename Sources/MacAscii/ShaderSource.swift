@@ -52,6 +52,25 @@ enum ShaderSource {
         return step(minP.x, p.x) * step(p.x, maxP.x) * step(minP.y, p.y) * step(p.y, maxP.y);
     }
 
+    uint trueAsciiGlyphIndex(uint bucketIndex, int luminanceBuckets) {
+        if (luminanceBuckets <= 10) {
+            switch (bucketIndex) {
+                case 0: return 0;   // space
+                case 1: return 1;   // .
+                case 2: return 6;   // :
+                case 3: return 8;   // c
+                case 4: return 9;   // o
+                case 5: return 11;  // P
+                case 6: return 10;  // O
+                case 7: return 20;  // ?
+                case 8: return 18;  // @
+                default: return 19; // #
+            }
+        }
+
+        return min(bucketIndex, uint(19));
+    }
+
     float glyphMask(float bucket, float2 local) {
         float dotBottom = 1.0 - smoothstep(0.09, 0.13, distance(local, float2(0.5, 0.76)));
         float dotTop = 1.0 - smoothstep(0.08, 0.12, distance(local, float2(0.5, 0.38)));
@@ -81,6 +100,7 @@ enum ShaderSource {
 
     fragment float4 fragment_ascii(VertexOut in [[stage_in]],
                                   texture2d<float> source [[texture(0)]],
+                                  texture2d<float> glyphAtlas [[texture(1)]],
                                   constant Uniforms& uniforms [[buffer(0)]]) {
         float2 uv = clamp(in.uv, float2(0.0), float2(1.0));
         float2 gridSize = max(float2(1.0), floor(uniforms.viewportSize / max(1.0, uniforms.cellSize)));
@@ -159,8 +179,12 @@ enum ShaderSource {
             0.0,
             1.0
         );
-        bool asciiLikeMode = uniforms.renderMode == 0 || uniforms.renderMode == 7;
-        float styleMask = asciiLikeMode ? asciiNormalizedMask : asciiMask;
+        float styleMask = asciiMask;
+        if (uniforms.renderMode == 0) {
+            styleMask = asciiNormalizedMask;
+        } else if (uniforms.renderMode == 7) {
+            styleMask = 1.0;
+        }
 
         float3 posterColor = floor((pow(clamp(cellColor, float3(0.0), float3(1.0)), float3(0.9)) * 9.0) + 0.5) / 9.0;
         float grayValue = luminance(posterColor);
@@ -389,6 +413,20 @@ enum ShaderSource {
             base = mix(base, neon, neonEdge * 0.92);
             base += neon * edgeBloom * 0.34;
             styledColor = clamp(base, float3(0.0), float3(1.0));
+        }
+
+        if (uniforms.renderMode == 7) {
+            uint bucketIndex = uint(clamp(bucket, 0.0, float(uniforms.luminanceBuckets - 1)));
+            uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
+            constexpr float atlasGlyphCount = 25.0;
+            float2 glyphUv = float2((float(glyphIndex) + local.x) / atlasGlyphCount, local.y);
+            float glyphSample = glyphAtlas.sample(linearSampler, glyphUv).r;
+            float glyphAlpha = smoothstep(0.16, 0.76, glyphSample);
+            float tinyCellStrength = mix(0.38, 1.0, smoothstep(1.0, 4.0, uniforms.cellSize));
+            float trueAsciiMask = clamp(glyphAlpha * tinyCellStrength, 0.0, 1.0);
+            float3 background = styledColor * mix(0.22, 0.38, level);
+            float3 foreground = clamp(styledColor * mix(1.08, 1.24, level), float3(0.0), float3(1.0));
+            styledColor = mix(background, foreground, trueAsciiMask);
         }
 
         return float4(styledColor, clamp(uniforms.opacity, 0.10, 1.0));

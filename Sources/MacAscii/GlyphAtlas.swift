@@ -3,7 +3,7 @@ import CoreText
 import Metal
 
 final class GlyphAtlas {
-    static let glyphs = Array(" .-,'`:;coOP0Q&8%B@#_|/\\")
+    static let glyphs = Array(" .-,'`:;coOP0Q&8%B@#?_|/\\")
 
     let texture: MTLTexture
     let glyphCount: Int

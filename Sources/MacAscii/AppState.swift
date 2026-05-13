@@ -103,7 +103,9 @@ final class AppState {
 
     let gridPresets = [
         GridPreset(name: "pixel-ascii", cellSize: 1),
+        GridPreset(name: "nano-ascii", cellSize: 2),
         GridPreset(name: "micro-ascii", cellSize: 4),
+        GridPreset(name: "small-ascii", cellSize: 5),
         GridPreset(name: "fine-ascii", cellSize: 8),
         GridPreset(name: "soft-large-ascii", cellSize: 10),
         GridPreset(name: "macbook-readable", cellSize: 12),
