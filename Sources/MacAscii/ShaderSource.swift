@@ -30,6 +30,8 @@ enum ShaderSource {
         float2 mouseTrail3;
         float2 mouseTrail4;
         float2 mouseTrail5;
+        float2 mouseTrail6;
+        float2 mouseTrail7;
     };
 
     vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
@@ -308,13 +310,13 @@ enum ShaderSource {
                                   float2 point,
                                   float active,
                                   float weight,
+                                  float radius,
                                   float2 outputSize,
                                   float time) {
         float aspect = outputSize.x / max(1.0, outputSize.y);
         float2 delta = uv - point;
         delta.x *= aspect;
         float dist = length(delta);
-        float radius = 0.165;
         float influence = (1.0 - smoothstep(0.0, radius, dist)) * active * weight;
 
         float2 direction = normalize(delta + float2(0.0001));
@@ -338,21 +340,27 @@ enum ShaderSource {
         float active = clamp(uniforms.mouseActive, 0.0, 1.0);
         float trailCount = uniforms.mousePadding;
 
-        float2 displacement = inputBendDisplacement(uv, mouse, active, 1.0, outputSize, uniforms.time);
+        float2 displacement = inputBendDisplacement(uv, mouse, active, 1.0, 0.165, outputSize, uniforms.time);
         if (trailCount > 1.5) {
-            displacement += inputBendDisplacement(uv, uniforms.mouseTrail1, active, 0.72, outputSize, uniforms.time - 0.04);
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail1, active, 0.90, 0.156, outputSize, uniforms.time - 0.02);
         }
         if (trailCount > 2.5) {
-            displacement += inputBendDisplacement(uv, uniforms.mouseTrail2, active, 0.54, outputSize, uniforms.time - 0.08);
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail2, active, 0.74, 0.148, outputSize, uniforms.time - 0.04);
         }
         if (trailCount > 3.5) {
-            displacement += inputBendDisplacement(uv, uniforms.mouseTrail3, active, 0.38, outputSize, uniforms.time - 0.12);
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail3, active, 0.56, 0.138, outputSize, uniforms.time - 0.06);
         }
         if (trailCount > 4.5) {
-            displacement += inputBendDisplacement(uv, uniforms.mouseTrail4, active, 0.25, outputSize, uniforms.time - 0.16);
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail4, active, 0.38, 0.128, outputSize, uniforms.time - 0.08);
         }
         if (trailCount > 5.5) {
-            displacement += inputBendDisplacement(uv, uniforms.mouseTrail5, active, 0.15, outputSize, uniforms.time - 0.20);
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail5, active, 0.24, 0.118, outputSize, uniforms.time - 0.10);
+        }
+        if (trailCount > 6.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail6, active, 0.14, 0.108, outputSize, uniforms.time - 0.12);
+        }
+        if (trailCount > 7.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail7, active, 0.08, 0.098, outputSize, uniforms.time - 0.14);
         }
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));

@@ -26,6 +26,8 @@ private struct Uniforms {
     var mouseTrail3: SIMD2<Float>
     var mouseTrail4: SIMD2<Float>
     var mouseTrail5: SIMD2<Float>
+    var mouseTrail6: SIMD2<Float>
+    var mouseTrail7: SIMD2<Float>
 }
 
 final class Renderer: NSObject, MTKViewDelegate {
@@ -44,7 +46,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var glyphAtlas: GlyphAtlas?
     private var cellMapTexture: MTLTexture?
     private var bentOutputTexture: MTLTexture?
-    private var mouseTrail = Array(repeating: SIMD2<Float>(0.5, 0.5), count: 6)
+    private var mouseTrail = Array(repeating: SIMD2<Float>(0.5, 0.5), count: 8)
     private var mouseTrailCount = 0
     private var lastMouseTrailSampleTime: Float = 0
     private var didAttemptGlyphAtlas = false
@@ -213,7 +215,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             mouseTrail2: mouseTrail[2],
             mouseTrail3: mouseTrail[3],
             mouseTrail4: mouseTrail[4],
-            mouseTrail5: mouseTrail[5]
+            mouseTrail5: mouseTrail[5],
+            mouseTrail6: mouseTrail[6],
+            mouseTrail7: mouseTrail[7]
         )
 
         if (shaderRenderMode == 7 || shaderRenderMode == 8), let activeCellMap {
@@ -340,8 +344,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         let previous = mouseTrail[0]
         let distance = simd_length(mouseState.position - previous)
         guard mouseTrailCount == 0 ||
-              distance > 0.004 ||
-              currentTime - lastMouseTrailSampleTime > 0.035 else {
+              distance > 0.0025 ||
+              currentTime - lastMouseTrailSampleTime > 0.016 else {
             return
         }
 
