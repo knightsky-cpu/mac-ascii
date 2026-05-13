@@ -52,6 +52,12 @@ enum ShaderSource {
         return step(minP.x, p.x) * step(p.x, maxP.x) * step(minP.y, p.y) * step(p.y, maxP.y);
     }
 
+    float hash12(float2 p) {
+        float3 p3 = fract(float3(p.xyx) * 0.1031);
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.x + p3.y) * p3.z);
+    }
+
     uint trueAsciiGlyphIndex(uint bucketIndex, int luminanceBuckets) {
         if (luminanceBuckets <= 10) {
             switch (bucketIndex) {
@@ -230,12 +236,64 @@ enum ShaderSource {
         cellMap.write(uint4(glyphIndex, bucketIndex, packedColor, packedEdge), gid);
     }
 
+    kernel void compute_circuit_bend(texture2d<float, access::sample> source [[texture(0)]],
+                                     texture2d<float, access::write> output [[texture(1)]],
+                                     constant Uniforms& uniforms [[buffer(0)]],
+                                     uint2 gid [[thread_position_in_grid]]) {
+        if (gid.x >= output.get_width() || gid.y >= output.get_height()) {
+            return;
+        }
+
+        float2 outputSize = float2(float(output.get_width()), float(output.get_height()));
+        float2 uv = (float2(gid) + float2(0.5)) / outputSize;
+        float time = uniforms.time;
+
+        float pulse = pow(max(0.0, sin(time * 1.35)), 24.0);
+        float row = floor(uv.y * outputSize.y);
+        float rowSeed = hash12(float2(row, floor(time * 18.0)));
+        float rowGate = step(0.965 - (pulse * 0.035), rowSeed);
+        float rowShift = (hash12(float2(row * 0.37, floor(time * 23.0))) - 0.5) * 0.12 * rowGate;
+        float waveShift = sin((uv.y * 95.0) + (time * 8.0)) * 0.0035 * (0.35 + pulse);
+        float roll = pulse * 0.18;
+
+        float2 baseUv = fract(float2(uv.x + rowShift + waveShift, uv.y + roll));
+        float drift = (sin((time * 3.0) + (uv.y * 24.0)) * 0.006) + (rowGate * 0.012);
+
+        float3 center = source.sample(linearSampler, baseUv).rgb;
+        float red = source.sample(linearSampler, fract(baseUv + float2(drift, 0.0))).r;
+        float green = center.g;
+        float blue = source.sample(linearSampler, fract(baseUv - float2(drift, 0.0))).b;
+        float3 color = float3(red, green, blue);
+
+        float lum = luminance(color);
+        float inversionGate = step(0.82, lum) * step(0.78 - (pulse * 0.18), hash12(floor(uv * outputSize / 18.0) + floor(time * 9.0)));
+        color = mix(color, 1.0 - color, inversionGate * (0.42 + (pulse * 0.38)));
+
+        float rotGate = step(0.991 - (pulse * 0.040), hash12(float2(gid) + floor(time * 31.0)));
+        uint3 bits = uint3(round(clamp(color, float3(0.0), float3(1.0)) * 255.0));
+        uint3 bentBits = bits ^ uint3(0x1Au, 0x05u, 0x22u);
+        color = mix(color, float3(bentBits) / 255.0, rotGate * 0.72);
+
+        float staticGate = step(0.996 - (pulse * 0.025), hash12(float2(gid.yx) + (time * 43.0)));
+        float staticValue = step(0.5, hash12(float2(gid) * 1.91 + floor(time * 60.0)));
+        color = mix(color, float3(staticValue), staticGate * 0.55);
+
+        float scan = 0.94 + (0.06 * sin((uv.y * outputSize.y * 3.14159) + (time * 12.0)));
+        color *= scan;
+
+        output.write(float4(clamp(color, float3(0.0), float3(1.0)), 1.0), gid);
+    }
+
     fragment float4 fragment_ascii(VertexOut in [[stage_in]],
                                   texture2d<float> source [[texture(0)]],
                                   texture2d<float> glyphAtlas [[texture(1)]],
                                   texture2d<uint> cellMap [[texture(2)]],
                                   constant Uniforms& uniforms [[buffer(0)]]) {
         float2 uv = clamp(in.uv, float2(0.0), float2(1.0));
+        if (uniforms.renderMode == 9) {
+            return float4(source.sample(linearSampler, uv).rgb, clamp(uniforms.opacity, 0.10, 1.0));
+        }
+
         float2 gridSize = max(float2(1.0), floor(uniforms.viewportSize / max(1.0, uniforms.cellSize)));
         float2 cell = uv * gridSize;
         float2 local = fract(cell);

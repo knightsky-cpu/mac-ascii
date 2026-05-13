@@ -105,6 +105,7 @@ true-ascii
 true-blocky-retro
 matrix-rain
 cyberpunk
+circuit-bend
 ```
 
 Grid sizes:

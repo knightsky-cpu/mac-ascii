@@ -23,6 +23,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let commandQueue: MTLCommandQueue
     private let pipelineState: MTLRenderPipelineState
     private let computePipelineState: MTLComputePipelineState?
+    private let circuitBendPipelineState: MTLComputePipelineState?
     private let textureCache: CVMetalTextureCache
     private let dummyCellMapTexture: MTLTexture
     private let state: AppState
@@ -31,6 +32,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var latestPixelBuffer: CVPixelBuffer?
     private var glyphAtlas: GlyphAtlas?
     private var cellMapTexture: MTLTexture?
+    private var bentOutputTexture: MTLTexture?
     private var didAttemptGlyphAtlas = false
     private var startedAt = CFAbsoluteTimeGetCurrent()
     private var didLogRenderState = false
@@ -67,6 +69,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                 computePipelineState = try? device.makeComputePipelineState(function: computeFunction)
             } else {
                 computePipelineState = nil
+            }
+            if let circuitFunction = library.makeFunction(name: "compute_circuit_bend") {
+                circuitBendPipelineState = try? device.makeComputePipelineState(function: circuitFunction)
+            } else {
+                circuitBendPipelineState = nil
             }
         } catch {
             print("MacAscii: failed to build Metal pipeline \(error)")
@@ -161,6 +168,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             activeGlyphAtlas = nil
             activeCellMap = nil
         }
+        var activeSourceTexture = sourceTexture
 
         var uniforms = Uniforms(
             viewportSize: viewportSize,
@@ -186,13 +194,25 @@ final class Renderer: NSObject, MTKViewDelegate {
             )
         }
 
+        if shaderRenderMode == 9,
+           let bentTexture = ensureBentOutputTexture(width: sourceTexture.width, height: sourceTexture.height),
+           circuitBendPipelineState != nil {
+            encodeCircuitBend(
+                commandBuffer: commandBuffer,
+                sourceTexture: sourceTexture,
+                outputTexture: bentTexture,
+                uniforms: &uniforms
+            )
+            activeSourceTexture = bentTexture
+        }
+
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
             return
         }
 
         encoder.setRenderPipelineState(pipelineState)
-        encoder.setFragmentTexture(sourceTexture, index: 0)
-        encoder.setFragmentTexture(activeGlyphAtlas?.texture ?? sourceTexture, index: 1)
+        encoder.setFragmentTexture(activeSourceTexture, index: 0)
+        encoder.setFragmentTexture(activeGlyphAtlas?.texture ?? activeSourceTexture, index: 1)
         encoder.setFragmentTexture(activeCellMap ?? dummyCellMapTexture, index: 2)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
@@ -236,6 +256,24 @@ final class Renderer: NSObject, MTKViewDelegate {
         return cellMapTexture
     }
 
+    private func ensureBentOutputTexture(width: Int, height: Int) -> MTLTexture? {
+        if let bentOutputTexture,
+           bentOutputTexture.width == width,
+           bentOutputTexture.height == height {
+            return bentOutputTexture
+        }
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        bentOutputTexture = device.makeTexture(descriptor: descriptor)
+        return bentOutputTexture
+    }
+
     private static func makeCellMapTexture(device: MTLDevice, width: Int, height: Int) -> MTLTexture? {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .rgba32Uint,
@@ -265,6 +303,28 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
         let threadsPerGrid = MTLSize(width: cellMapTexture.width, height: cellMapTexture.height, depth: 1)
+        computeEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        computeEncoder.endEncoding()
+    }
+
+    private func encodeCircuitBend(
+        commandBuffer: MTLCommandBuffer,
+        sourceTexture: MTLTexture,
+        outputTexture: MTLTexture,
+        uniforms: inout Uniforms
+    ) {
+        guard let circuitBendPipelineState,
+              let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
+            return
+        }
+
+        computeEncoder.setComputePipelineState(circuitBendPipelineState)
+        computeEncoder.setTexture(sourceTexture, index: 0)
+        computeEncoder.setTexture(outputTexture, index: 1)
+        computeEncoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
+
+        let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
+        let threadsPerGrid = MTLSize(width: outputTexture.width, height: outputTexture.height, depth: 1)
         computeEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
         computeEncoder.endEncoding()
     }
