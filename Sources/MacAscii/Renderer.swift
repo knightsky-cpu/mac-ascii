@@ -20,6 +20,12 @@ private struct Uniforms {
     var mousePosition: SIMD2<Float>
     var mouseActive: Float
     var mousePadding: Float
+    var mouseTrail0: SIMD2<Float>
+    var mouseTrail1: SIMD2<Float>
+    var mouseTrail2: SIMD2<Float>
+    var mouseTrail3: SIMD2<Float>
+    var mouseTrail4: SIMD2<Float>
+    var mouseTrail5: SIMD2<Float>
 }
 
 final class Renderer: NSObject, MTKViewDelegate {
@@ -38,6 +44,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var glyphAtlas: GlyphAtlas?
     private var cellMapTexture: MTLTexture?
     private var bentOutputTexture: MTLTexture?
+    private var mouseTrail = Array(repeating: SIMD2<Float>(0.5, 0.5), count: 6)
+    private var mouseTrailCount = 0
+    private var lastMouseTrailSampleTime: Float = 0
     private var didAttemptGlyphAtlas = false
     private var startedAt = CFAbsoluteTimeGetCurrent()
     private var didLogRenderState = false
@@ -141,7 +150,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             Float(view.drawableSize.height) / max(1.0, displayScale)
         )
         let sourceSize = SIMD2(Float(sourceTexture.width), Float(sourceTexture.height))
+        let currentTime = Float(CFAbsoluteTimeGetCurrent() - startedAt)
         let mouseState = normalizedMousePosition()
+        updateMouseTrail(mouseState: mouseState, currentTime: currentTime)
 
         if !didLogRenderState {
             print(
@@ -193,10 +204,16 @@ final class Renderer: NSObject, MTKViewDelegate {
             contrast: renderState.contrast,
             gamma: renderState.gamma,
             edgeStrength: renderState.edgeStrength,
-            time: Float(CFAbsoluteTimeGetCurrent() - startedAt),
+            time: currentTime,
             mousePosition: mouseState.position,
             mouseActive: mouseState.active,
-            mousePadding: 0
+            mousePadding: Float(mouseTrailCount),
+            mouseTrail0: mouseTrail[0],
+            mouseTrail1: mouseTrail[1],
+            mouseTrail2: mouseTrail[2],
+            mouseTrail3: mouseTrail[3],
+            mouseTrail4: mouseTrail[4],
+            mouseTrail5: mouseTrail[5]
         )
 
         if (shaderRenderMode == 7 || shaderRenderMode == 8), let activeCellMap {
@@ -312,6 +329,26 @@ final class Renderer: NSObject, MTKViewDelegate {
             ),
             1
         )
+    }
+
+    private func updateMouseTrail(mouseState: (position: SIMD2<Float>, active: Float), currentTime: Float) {
+        guard mouseState.active > 0 else {
+            mouseTrailCount = 0
+            return
+        }
+
+        let previous = mouseTrail[0]
+        let distance = simd_length(mouseState.position - previous)
+        guard mouseTrailCount == 0 ||
+              distance > 0.004 ||
+              currentTime - lastMouseTrailSampleTime > 0.035 else {
+            return
+        }
+
+        mouseTrail.insert(mouseState.position, at: 0)
+        mouseTrail.removeLast()
+        mouseTrailCount = min(mouseTrailCount + 1, mouseTrail.count)
+        lastMouseTrailSampleTime = currentTime
     }
 
     private func bendPipelineState(for renderMode: Int32) -> MTLComputePipelineState? {

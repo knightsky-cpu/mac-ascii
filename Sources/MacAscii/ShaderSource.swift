@@ -24,6 +24,12 @@ enum ShaderSource {
         float2 mousePosition;
         float mouseActive;
         float mousePadding;
+        float2 mouseTrail0;
+        float2 mouseTrail1;
+        float2 mouseTrail2;
+        float2 mouseTrail3;
+        float2 mouseTrail4;
+        float2 mouseTrail5;
     };
 
     vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
@@ -298,6 +304,31 @@ enum ShaderSource {
         output.write(float4(clamp(color, float3(0.0), float3(1.0)), 1.0), gid);
     }
 
+    float2 inputBendDisplacement(float2 uv,
+                                  float2 point,
+                                  float active,
+                                  float weight,
+                                  float2 outputSize,
+                                  float time,
+                                  thread float& ringSum) {
+        float aspect = outputSize.x / max(1.0, outputSize.y);
+        float2 delta = uv - point;
+        delta.x *= aspect;
+        float dist = length(delta);
+        float radius = 0.165;
+        float influence = (1.0 - smoothstep(0.0, radius, dist)) * active * weight;
+        float ring = smoothstep(radius, radius * 0.72, dist) *
+                     smoothstep(radius * 0.34, radius * 0.78, dist) *
+                     active * weight;
+        ringSum += ring;
+
+        float2 direction = normalize(delta + float2(0.0001));
+        direction.x /= aspect;
+        float pull = influence * influence * 0.040;
+        float ripple = sin((dist * 84.0) - (time * 5.0)) * influence * 0.004;
+        return direction * (pull + ripple);
+    }
+
     kernel void compute_input_bend(texture2d<float, access::sample> source [[texture(0)]],
                                    texture2d<float, access::write> output [[texture(1)]],
                                    constant Uniforms& uniforms [[buffer(0)]],
@@ -310,22 +341,30 @@ enum ShaderSource {
         float2 uv = (float2(gid) + float2(0.5)) / outputSize;
         float2 mouse = clamp(uniforms.mousePosition, float2(0.0), float2(1.0));
         float active = clamp(uniforms.mouseActive, 0.0, 1.0);
+        float trailCount = uniforms.mousePadding;
 
-        float2 delta = uv - mouse;
-        delta.x *= outputSize.x / max(1.0, outputSize.y);
-        float dist = length(delta);
-        float radius = 0.165;
-        float influence = (1.0 - smoothstep(0.0, radius, dist)) * active;
-        float ring = smoothstep(radius, radius * 0.72, dist) * smoothstep(radius * 0.34, radius * 0.78, dist) * active;
+        float ring = 0.0;
+        float2 displacement = inputBendDisplacement(uv, mouse, active, 1.0, outputSize, uniforms.time, ring);
+        if (trailCount > 1.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail1, active, 0.72, outputSize, uniforms.time - 0.04, ring);
+        }
+        if (trailCount > 2.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail2, active, 0.54, outputSize, uniforms.time - 0.08, ring);
+        }
+        if (trailCount > 3.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail3, active, 0.38, outputSize, uniforms.time - 0.12, ring);
+        }
+        if (trailCount > 4.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail4, active, 0.25, outputSize, uniforms.time - 0.16, ring);
+        }
+        if (trailCount > 5.5) {
+            displacement += inputBendDisplacement(uv, uniforms.mouseTrail5, active, 0.15, outputSize, uniforms.time - 0.20, ring);
+        }
 
-        float2 direction = normalize(delta + float2(0.0001));
-        direction.x /= outputSize.x / max(1.0, outputSize.y);
-        float pull = influence * influence * 0.040;
-        float ripple = sin((dist * 84.0) - (uniforms.time * 5.0)) * influence * 0.004;
-        float2 sampleUv = clamp(uv - (direction * (pull + ripple)), float2(0.0), float2(1.0));
+        float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
 
         float3 color = source.sample(linearSampler, sampleUv).rgb;
-        float edgeLift = ring * 0.035;
+        float edgeLift = clamp(ring, 0.0, 1.0) * 0.035;
         color = clamp(color + edgeLift, float3(0.0), float3(1.0));
 
         output.write(float4(color, 1.0), gid);
