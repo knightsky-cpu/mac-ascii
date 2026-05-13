@@ -116,7 +116,9 @@ enum ShaderSource {
         float exposed = pow(clamp((lum * 1.35) + 0.08, 0.0, 0.999), 0.72);
         uint bucketIndex = uint(clamp(floor(exposed * float(uniforms.luminanceBuckets)), 0.0, float(uniforms.luminanceBuckets - 1)));
         uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
-        cellMap.write(uint4(glyphIndex, 0, 0, 0), gid);
+        uint3 color8 = uint3(round(clamp(cellColor, float3(0.0), float3(1.0)) * 255.0));
+        uint packedColor = color8.r | (color8.g << 8) | (color8.b << 16);
+        cellMap.write(uint4(glyphIndex, bucketIndex, packedColor, 0), gid);
     }
 
     fragment float4 fragment_ascii(VertexOut in [[stage_in]],
@@ -307,10 +309,27 @@ enum ShaderSource {
         else if (uniforms.styleMode == 9) styledColor = moonColor;
         else if (uniforms.styleMode == 10) styledColor = thermalColor;
 
-        if (uniforms.renderMode == 1) {
+        if (uniforms.renderMode == 1 || uniforms.renderMode == 8) {
+            uint2 blockCellIndex = uint2(
+                min(uint(floor(cell.x)), cellMap.get_width() - 1),
+                min(uint(floor(cell.y)), cellMap.get_height() - 1)
+            );
+            uint4 blockCellData = cellMap.read(blockCellIndex);
             float3 blockBase = floor(clamp(cellColor, float3(0.0), float3(1.0)) * 5.0 + 0.5) / 5.0;
+            if (uniforms.renderMode == 8) {
+                uint packedColor = blockCellData.b;
+                blockBase = float3(
+                    float(packedColor & 255u),
+                    float((packedColor >> 8) & 255u),
+                    float((packedColor >> 16) & 255u)
+                ) / 255.0;
+                blockBase = floor(clamp(blockBase, float3(0.0), float3(1.0)) * 5.0 + 0.5) / 5.0;
+            }
             float blockLum = luminance(blockBase);
             float3 blockColor = mix(blockBase, posterColor, 0.35);
+            if (uniforms.renderMode == 8) {
+                blockColor = blockBase;
+            }
 
             if (uniforms.styleMode == 0 || uniforms.styleMode == 5) {
                 float3 amber = mix(float3(0.16, 0.08, 0.02), float3(1.0, 0.66, 0.14), blockLum);

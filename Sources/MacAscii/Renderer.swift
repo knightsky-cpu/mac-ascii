@@ -76,12 +76,12 @@ final class Renderer: NSObject, MTKViewDelegate {
         guard let dummyCellMapTexture = Self.makeCellMapTexture(device: device, width: 1, height: 1) else {
             return nil
         }
-        var zero: UInt32 = 0
+        var zero = SIMD4<UInt32>(0, 0, 0, 0)
         dummyCellMapTexture.replace(
             region: MTLRegionMake2D(0, 0, 1, 1),
             mipmapLevel: 0,
             withBytes: &zero,
-            bytesPerRow: MemoryLayout<UInt32>.stride
+            bytesPerRow: MemoryLayout<SIMD4<UInt32>>.stride
         )
 
         self.device = device
@@ -115,7 +115,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         let renderState = state.sanitizedRenderState()
-        if renderState.renderMode == 7 {
+        if renderState.renderMode == 7 || renderState.renderMode == 8 {
             prepareGlyphAtlasIfNeeded()
         }
 
@@ -148,7 +148,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         var shaderRenderMode = renderState.renderMode
         let activeGlyphAtlas: GlyphAtlas?
         let activeCellMap: MTLTexture?
-        if renderState.renderMode == 7 {
+        if renderState.renderMode == 7 || renderState.renderMode == 8 {
             activeGlyphAtlas = glyphAtlas
             activeCellMap = ensureCellMapTexture(
                 width: max(1, Int(floor(viewportSize.x / max(1.0, renderState.cellSize)))),
@@ -177,7 +177,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             time: Float(CFAbsoluteTimeGetCurrent() - startedAt)
         )
 
-        if shaderRenderMode == 7, let activeCellMap {
+        if (shaderRenderMode == 7 || shaderRenderMode == 8), let activeCellMap {
             encodeTrueAsciiCellMap(
                 commandBuffer: commandBuffer,
                 sourceTexture: sourceTexture,
@@ -238,7 +238,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private static func makeCellMapTexture(device: MTLDevice, width: Int, height: Int) -> MTLTexture? {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .r32Uint,
+            pixelFormat: .rgba32Uint,
             width: width,
             height: height,
             mipmapped: false
