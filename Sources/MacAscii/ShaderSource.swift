@@ -109,6 +109,7 @@ enum ShaderSource {
         float2 gridSize = float2(float(cellMap.get_width()), float(cellMap.get_height()));
         float2 cellUv = (float2(gid) + float2(0.5)) / gridSize;
         float3 cellColor = source.sample(linearSampler, cellUv).rgb;
+        float rawLum = luminance(cellColor);
         float toneGamma = clamp(uniforms.gamma, 0.50, 2.0);
         cellColor = clamp(((cellColor + uniforms.brightness) - 0.5) * clamp(uniforms.contrast, 0.50, 2.0) + 0.5, float3(0.0), float3(1.0));
         cellColor = pow(cellColor, float3(1.0 / toneGamma));
@@ -116,6 +117,54 @@ enum ShaderSource {
         float exposed = pow(clamp((lum * 1.35) + 0.08, 0.0, 0.999), 0.72);
         uint bucketIndex = uint(clamp(floor(exposed * float(uniforms.luminanceBuckets)), 0.0, float(uniforms.luminanceBuckets - 1)));
         uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
+
+        float2 texel = 1.0 / gridSize;
+        float lumLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, 0.0), float2(0.0), float2(1.0))).rgb);
+        float lumRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, 0.0), float2(0.0), float2(1.0))).rgb);
+        float lumTop = luminance(source.sample(linearSampler, clamp(cellUv + float2(0.0, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottom = luminance(source.sample(linearSampler, clamp(cellUv + float2(0.0, texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumTopLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumTopRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottomLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottomRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
+        float localMean = (
+            lumTopLeft + lumTop + lumTopRight +
+            lumLeft + rawLum + lumRight +
+            lumBottomLeft + lumBottom + lumBottomRight
+        ) / 9.0;
+        float dogContrast = clamp(abs(rawLum - localMean) * 4.0, 0.0, 1.0);
+        float gradientX = (lumTopRight + (2.0 * lumRight) + lumBottomRight) - (lumTopLeft + (2.0 * lumLeft) + lumBottomLeft);
+        float gradientY = (lumBottomLeft + (2.0 * lumBottom) + lumBottomRight) - (lumTopLeft + (2.0 * lumTop) + lumTopRight);
+        float gradientMagnitude = length(float2(gradientX, gradientY));
+        float absX = abs(gradientX);
+        float absY = abs(gradientY);
+        float majorGradient = max(absX, absY);
+        float minorGradient = min(absX, absY);
+        float gradientSum = max(0.0001, absX + absY);
+        float axisDominance = majorGradient / gradientSum;
+        float axisMargin = (majorGradient - minorGradient) / gradientSum;
+        float diagonalBalance = 1.0 - axisMargin;
+        float directionCoherence = max(
+            smoothstep(0.58, 0.78, axisDominance),
+            smoothstep(0.42, 0.62, diagonalBalance)
+        );
+        float dogGate = smoothstep(0.018, 0.085, dogContrast);
+        float trueAsciiGradientEdge = smoothstep(0.30, 0.88, gradientMagnitude);
+        float trueAsciiEdgeConfidence = trueAsciiGradientEdge * mix(0.58, 1.0, dogGate) * directionCoherence;
+        bool diagonalEdge = !(absX > absY * 1.40) && !(absY > absX * 1.40);
+        float trueAsciiEdgeThreshold = diagonalEdge ? 0.48 : 0.28;
+        if (trueAsciiEdgeConfidence >= trueAsciiEdgeThreshold) {
+            if (absX > absY * 1.40) {
+                glyphIndex = 21; // |
+            } else if (absY > absX * 1.40) {
+                glyphIndex = 20; // _
+            } else if (gradientX * gradientY > 0.0) {
+                glyphIndex = 22; // /
+            } else {
+                glyphIndex = 23; // backslash
+            }
+        }
+
         uint3 color8 = uint3(round(clamp(cellColor, float3(0.0), float3(1.0)) * 255.0));
         uint packedColor = color8.r | (color8.g << 8) | (color8.b << 16);
         cellMap.write(uint4(glyphIndex, bucketIndex, packedColor, 0), gid);
@@ -472,22 +521,6 @@ enum ShaderSource {
                 min(uint(floor(cell.y)), cellMap.get_height() - 1)
             );
             uint glyphIndex = cellMap.read(cellIndex).r;
-            float dogGate = smoothstep(0.018, 0.085, dogContrast);
-            float trueAsciiGradientEdge = smoothstep(0.30, 0.88, gradientMagnitude);
-            float trueAsciiEdgeConfidence = trueAsciiGradientEdge * mix(0.58, 1.0, dogGate) * directionCoherence;
-            bool trueAsciiDiagonal = diagonalEdge > 0.5;
-            float trueAsciiEdgeThreshold = trueAsciiDiagonal ? 0.48 : 0.28;
-            if (trueAsciiEdgeConfidence >= trueAsciiEdgeThreshold) {
-                if (absX > absY * 1.40) {
-                    glyphIndex = 21; // |
-                } else if (absY > absX * 1.40) {
-                    glyphIndex = 20; // _
-                } else if (gradientX * gradientY > 0.0) {
-                    glyphIndex = 22; // /
-                } else {
-                    glyphIndex = 23; // backslash
-                }
-            }
             constexpr float atlasGlyphCount = 25.0;
             float2 glyphUv = float2((float(glyphIndex) + local.x) / atlasGlyphCount, local.y);
             float glyphSample = glyphAtlas.sample(linearSampler, glyphUv).r;
