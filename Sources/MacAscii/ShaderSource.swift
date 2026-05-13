@@ -418,6 +418,20 @@ enum ShaderSource {
         if (uniforms.renderMode == 7) {
             uint bucketIndex = uint(clamp(bucket, 0.0, float(uniforms.luminanceBuckets - 1)));
             uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
+            float trueAsciiEdgeConfidence = rawEdgeStrength * directionCoherence;
+            bool trueAsciiDiagonal = diagonalEdge > 0.5;
+            float trueAsciiEdgeThreshold = trueAsciiDiagonal ? 0.54 : 0.36;
+            if (trueAsciiEdgeConfidence >= trueAsciiEdgeThreshold) {
+                if (absX > absY * 1.40) {
+                    glyphIndex = 21; // |
+                } else if (absY > absX * 1.40) {
+                    glyphIndex = 20; // _
+                } else if (gradientX * gradientY > 0.0) {
+                    glyphIndex = 22; // /
+                } else {
+                    glyphIndex = 23; // backslash
+                }
+            }
             constexpr float atlasGlyphCount = 25.0;
             float2 glyphUv = float2((float(glyphIndex) + local.x) / atlasGlyphCount, local.y);
             float glyphSample = glyphAtlas.sample(linearSampler, glyphUv).r;
