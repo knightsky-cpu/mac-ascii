@@ -44,9 +44,23 @@ private struct Uniforms {
     var circuitBitRot: Float
     var circuitStaticNoise: Float
     var circuitVSyncRoll: Float
+    var waterRippleCount: Float
+    var waterRipple0: SIMD4<Float>
+    var waterRipple1: SIMD4<Float>
+    var waterRipple2: SIMD4<Float>
+    var waterRipple3: SIMD4<Float>
+    var waterRipple4: SIMD4<Float>
+    var waterRipple5: SIMD4<Float>
+    var waterRipple6: SIMD4<Float>
+    var waterRipple7: SIMD4<Float>
 }
 
 final class Renderer: NSObject, MTKViewDelegate {
+    private struct WaterRipple {
+        var position: SIMD2<Float>
+        var startTime: Float
+    }
+
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let pipelineState: MTLRenderPipelineState
@@ -54,6 +68,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let circuitBendPipelineState: MTLComputePipelineState?
     private let inputBendPipelineState: MTLComputePipelineState?
     private let inputBendTrailPipelineState: MTLComputePipelineState?
+    private let waterPipelineState: MTLComputePipelineState?
     private let textureCache: CVMetalTextureCache
     private let dummyCellMapTexture: MTLTexture
     private let state: AppState
@@ -70,6 +85,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var mouseTrail = Array(repeating: SIMD2<Float>(0.5, 0.5), count: 16)
     private var mouseTrailCount = 0
     private var lastMouseTrailSampleTime: Float = 0
+    private var waterRipples: [WaterRipple] = []
+    private var wasLeftMouseDown = false
     private var didAttemptGlyphAtlas = false
     private var startedAt = CFAbsoluteTimeGetCurrent()
     private var didLogRenderState = false
@@ -121,6 +138,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                 inputBendTrailPipelineState = try? device.makeComputePipelineState(function: inputTrailFunction)
             } else {
                 inputBendTrailPipelineState = nil
+            }
+            if let waterFunction = library.makeFunction(name: "compute_water_bend") {
+                waterPipelineState = try? device.makeComputePipelineState(function: waterFunction)
+            } else {
+                waterPipelineState = nil
             }
         } catch {
             print("MacAscii: failed to build Metal pipeline \(error)")
@@ -218,6 +240,8 @@ final class Renderer: NSObject, MTKViewDelegate {
             activeGlyphAtlas = nil
             activeCellMap = nil
         }
+        updateWaterRipplesIfNeeded(renderMode: shaderRenderMode, mouseState: mouseState, currentTime: currentTime)
+        let waterUniformRipples = waterRippleUniforms(currentTime: currentTime)
         if shaderRenderMode != 10 {
             resetInputTrailTextures()
         }
@@ -262,7 +286,16 @@ final class Renderer: NSObject, MTKViewDelegate {
             circuitLumaInvert: renderState.circuitLumaInvert,
             circuitBitRot: renderState.circuitBitRot,
             circuitStaticNoise: renderState.circuitStaticNoise,
-            circuitVSyncRoll: renderState.circuitVSyncRoll
+            circuitVSyncRoll: renderState.circuitVSyncRoll,
+            waterRippleCount: Float(waterUniformRipples.count),
+            waterRipple0: waterUniformRipples.values[0],
+            waterRipple1: waterUniformRipples.values[1],
+            waterRipple2: waterUniformRipples.values[2],
+            waterRipple3: waterUniformRipples.values[3],
+            waterRipple4: waterUniformRipples.values[4],
+            waterRipple5: waterUniformRipples.values[5],
+            waterRipple6: waterUniformRipples.values[6],
+            waterRipple7: waterUniformRipples.values[7]
         )
 
         if (shaderRenderMode == 7 || shaderRenderMode == 8), let activeCellMap {
@@ -297,6 +330,17 @@ final class Renderer: NSObject, MTKViewDelegate {
         } else if shaderRenderMode == 9,
            let bentTexture = ensureBentOutputTexture(width: sourceTexture.width, height: sourceTexture.height),
            bendPipelineState(for: shaderRenderMode) != nil {
+            encodeBendOutput(
+                commandBuffer: commandBuffer,
+                sourceTexture: sourceTexture,
+                outputTexture: bentTexture,
+                trailTexture: nil,
+                uniforms: &uniforms
+            )
+            activeSourceTexture = bentTexture
+        } else if shaderRenderMode == 11,
+                  let bentTexture = ensureBentOutputTexture(width: sourceTexture.width, height: sourceTexture.height),
+                  waterPipelineState != nil {
             encodeBendOutput(
                 commandBuffer: commandBuffer,
                 sourceTexture: sourceTexture,
@@ -478,12 +522,55 @@ final class Renderer: NSObject, MTKViewDelegate {
         lastMouseTrailSampleTime = currentTime
     }
 
+    private func updateWaterRipplesIfNeeded(
+        renderMode: Int32,
+        mouseState: (position: SIMD2<Float>, active: Float),
+        currentTime: Float
+    ) {
+        let isLeftMouseDown = CGEventSource.buttonState(.hidSystemState, button: .left)
+        defer {
+            wasLeftMouseDown = isLeftMouseDown
+        }
+
+        waterRipples.removeAll { currentTime - $0.startTime > 2.2 }
+        guard renderMode == 11, mouseState.active > 0 else {
+            return
+        }
+
+        if isLeftMouseDown && !wasLeftMouseDown {
+            waterRipples.insert(
+                WaterRipple(position: mouseState.position, startTime: currentTime),
+                at: 0
+            )
+            if waterRipples.count > 8 {
+                waterRipples.removeLast(waterRipples.count - 8)
+            }
+        }
+    }
+
+    private func waterRippleUniforms(currentTime: Float) -> (count: Int, values: [SIMD4<Float>]) {
+        let activeRipples = waterRipples
+            .filter { currentTime - $0.startTime <= 2.2 }
+            .prefix(8)
+        var values = activeRipples.map { ripple in
+            SIMD4<Float>(ripple.position.x, ripple.position.y, ripple.startTime, 1)
+        }
+        let count = values.count
+        while values.count < 8 {
+            values.append(SIMD4<Float>(0.5, 0.5, -1000, 0))
+        }
+        return (count, values)
+    }
+
     private func bendPipelineState(for renderMode: Int32) -> MTLComputePipelineState? {
         if renderMode == 9 {
             return circuitBendPipelineState
         }
         if renderMode == 10 {
             return inputBendPipelineState
+        }
+        if renderMode == 11 {
+            return waterPipelineState
         }
         return nil
     }

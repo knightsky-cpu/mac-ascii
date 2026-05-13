@@ -48,6 +48,15 @@ enum ShaderSource {
         float circuitBitRot;
         float circuitStaticNoise;
         float circuitVSyncRoll;
+        float waterRippleCount;
+        float4 waterRipple0;
+        float4 waterRipple1;
+        float4 waterRipple2;
+        float4 waterRipple3;
+        float4 waterRipple4;
+        float4 waterRipple5;
+        float4 waterRipple6;
+        float4 waterRipple7;
     };
 
     vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
@@ -460,13 +469,69 @@ enum ShaderSource {
         output.write(float4(color, 1.0), gid);
     }
 
+    float2 waterRippleDisplacement(float2 uv, float4 ripple, float2 outputSize, float time) {
+        if (ripple.w < 0.5) {
+            return float2(0.0);
+        }
+
+        float age = time - ripple.z;
+        if (age < 0.0 || age > 2.2) {
+            return float2(0.0);
+        }
+
+        float aspect = outputSize.x / max(1.0, outputSize.y);
+        float2 center = ripple.xy;
+        float2 delta = uv - center;
+        delta.x *= aspect;
+        float dist = length(delta);
+        float2 direction = normalize(delta + float2(0.0001));
+        direction.x /= aspect;
+
+        float waveRadius = age * 0.46;
+        float waveDistance = abs(dist - waveRadius);
+        float ring = 1.0 - smoothstep(0.0, 0.045 + (age * 0.010), waveDistance);
+        float decay = pow(clamp(1.0 - (age / 2.2), 0.0, 1.0), 1.65);
+        float phase = sin((dist - waveRadius) * 105.0);
+        float amplitude = ring * decay * phase * 0.026;
+
+        float innerWake = (1.0 - smoothstep(0.0, waveRadius, dist)) *
+                          smoothstep(0.0, 0.20, age) *
+                          decay * 0.004;
+        return direction * (amplitude + innerWake);
+    }
+
+    kernel void compute_water_bend(texture2d<float, access::sample> source [[texture(0)]],
+                                   texture2d<float, access::write> output [[texture(1)]],
+                                   constant Uniforms& uniforms [[buffer(0)]],
+                                   uint2 gid [[thread_position_in_grid]]) {
+        if (gid.x >= output.get_width() || gid.y >= output.get_height()) {
+            return;
+        }
+
+        float2 outputSize = float2(float(output.get_width()), float(output.get_height()));
+        float2 uv = (float2(gid) + float2(0.5)) / outputSize;
+        float2 displacement = float2(0.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple0, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple1, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple2, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple3, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple4, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple5, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple6, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple7, outputSize, uniforms.time);
+
+        float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
+        float3 color = source.sample(linearSampler, sampleUv).rgb;
+        output.write(float4(color, 1.0), gid);
+    }
+
     fragment float4 fragment_ascii(VertexOut in [[stage_in]],
                                   texture2d<float> source [[texture(0)]],
                                   texture2d<float> glyphAtlas [[texture(1)]],
                                   texture2d<uint> cellMap [[texture(2)]],
                                   constant Uniforms& uniforms [[buffer(0)]]) {
         float2 uv = clamp(in.uv, float2(0.0), float2(1.0));
-        if (uniforms.renderMode == 9 || uniforms.renderMode == 10) {
+        if (uniforms.renderMode == 9 || uniforms.renderMode == 10 || uniforms.renderMode == 11) {
             return float4(source.sample(linearSampler, uv).rgb, clamp(uniforms.opacity, 0.10, 1.0));
         }
 

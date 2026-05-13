@@ -107,6 +107,7 @@ true-blocky-retro
 matrix-rain
 circuit-bend
 liquid-input
+water
 ```
 
 Grid sizes:
