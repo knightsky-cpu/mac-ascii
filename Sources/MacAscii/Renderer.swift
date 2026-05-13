@@ -22,12 +22,15 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let pipelineState: MTLRenderPipelineState
+    private let computePipelineState: MTLComputePipelineState?
     private let textureCache: CVMetalTextureCache
+    private let dummyCellMapTexture: MTLTexture
     private let state: AppState
     private let displayScale: Float
     private let lock = NSLock()
     private var latestPixelBuffer: CVPixelBuffer?
     private var glyphAtlas: GlyphAtlas?
+    private var cellMapTexture: MTLTexture?
     private var didAttemptGlyphAtlas = false
     private var startedAt = CFAbsoluteTimeGetCurrent()
     private var didLogRenderState = false
@@ -60,14 +63,31 @@ final class Renderer: NSObject, MTKViewDelegate {
             descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
             descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
             pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
+            if let computeFunction = library.makeFunction(name: "compute_true_ascii_cell_map") {
+                computePipelineState = try? device.makeComputePipelineState(function: computeFunction)
+            } else {
+                computePipelineState = nil
+            }
         } catch {
             print("MacAscii: failed to build Metal pipeline \(error)")
             return nil
         }
 
+        guard let dummyCellMapTexture = Self.makeCellMapTexture(device: device, width: 1, height: 1) else {
+            return nil
+        }
+        var zero: UInt32 = 0
+        dummyCellMapTexture.replace(
+            region: MTLRegionMake2D(0, 0, 1, 1),
+            mipmapLevel: 0,
+            withBytes: &zero,
+            bytesPerRow: MemoryLayout<UInt32>.stride
+        )
+
         self.device = device
         self.commandQueue = commandQueue
         self.textureCache = cache
+        self.dummyCellMapTexture = dummyCellMapTexture
         self.state = state
         self.displayScale = Float(displayScale)
         super.init()
@@ -90,7 +110,6 @@ final class Renderer: NSObject, MTKViewDelegate {
               let drawable = view.currentDrawable,
               let passDescriptor = view.currentRenderPassDescriptor,
               let commandBuffer = commandQueue.makeCommandBuffer(),
-              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor),
               let sourceTexture = makeTexture(from: pixelBuffer) else {
             return
         }
@@ -128,13 +147,19 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         var shaderRenderMode = renderState.renderMode
         let activeGlyphAtlas: GlyphAtlas?
+        let activeCellMap: MTLTexture?
         if renderState.renderMode == 7 {
             activeGlyphAtlas = glyphAtlas
-            if activeGlyphAtlas == nil {
+            activeCellMap = ensureCellMapTexture(
+                width: max(1, Int(floor(viewportSize.x / max(1.0, renderState.cellSize)))),
+                height: max(1, Int(floor(viewportSize.y / max(1.0, renderState.cellSize))))
+            )
+            if activeGlyphAtlas == nil || activeCellMap == nil || computePipelineState == nil {
                 shaderRenderMode = 0
             }
         } else {
             activeGlyphAtlas = nil
+            activeCellMap = nil
         }
 
         var uniforms = Uniforms(
@@ -152,9 +177,23 @@ final class Renderer: NSObject, MTKViewDelegate {
             time: Float(CFAbsoluteTimeGetCurrent() - startedAt)
         )
 
+        if shaderRenderMode == 7, let activeCellMap {
+            encodeTrueAsciiCellMap(
+                commandBuffer: commandBuffer,
+                sourceTexture: sourceTexture,
+                cellMapTexture: activeCellMap,
+                uniforms: &uniforms
+            )
+        }
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
+            return
+        }
+
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentTexture(sourceTexture, index: 0)
         encoder.setFragmentTexture(activeGlyphAtlas?.texture ?? sourceTexture, index: 1)
+        encoder.setFragmentTexture(activeCellMap ?? dummyCellMapTexture, index: 2)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
@@ -184,6 +223,50 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
 
         return CVMetalTextureGetTexture(cvTexture)
+    }
+
+    private func ensureCellMapTexture(width: Int, height: Int) -> MTLTexture? {
+        if let cellMapTexture,
+           cellMapTexture.width == width,
+           cellMapTexture.height == height {
+            return cellMapTexture
+        }
+
+        cellMapTexture = Self.makeCellMapTexture(device: device, width: width, height: height)
+        return cellMapTexture
+    }
+
+    private static func makeCellMapTexture(device: MTLDevice, width: Int, height: Int) -> MTLTexture? {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r32Uint,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        return device.makeTexture(descriptor: descriptor)
+    }
+
+    private func encodeTrueAsciiCellMap(
+        commandBuffer: MTLCommandBuffer,
+        sourceTexture: MTLTexture,
+        cellMapTexture: MTLTexture,
+        uniforms: inout Uniforms
+    ) {
+        guard let computePipelineState,
+              let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
+            return
+        }
+
+        computeEncoder.setComputePipelineState(computePipelineState)
+        computeEncoder.setTexture(sourceTexture, index: 0)
+        computeEncoder.setTexture(cellMapTexture, index: 1)
+        computeEncoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
+
+        let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
+        let threadsPerGrid = MTLSize(width: cellMapTexture.width, height: cellMapTexture.height, depth: 1)
+        computeEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        computeEncoder.endEncoding()
     }
 
     private func prepareGlyphAtlasIfNeeded() {

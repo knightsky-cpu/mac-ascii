@@ -98,9 +98,31 @@ enum ShaderSource {
         return max(max(verticalMid, horizontalMid), max(leftStroke, rightStroke));
     }
 
+    kernel void compute_true_ascii_cell_map(texture2d<float, access::sample> source [[texture(0)]],
+                                            texture2d<uint, access::write> cellMap [[texture(1)]],
+                                            constant Uniforms& uniforms [[buffer(0)]],
+                                            uint2 gid [[thread_position_in_grid]]) {
+        if (gid.x >= cellMap.get_width() || gid.y >= cellMap.get_height()) {
+            return;
+        }
+
+        float2 gridSize = float2(float(cellMap.get_width()), float(cellMap.get_height()));
+        float2 cellUv = (float2(gid) + float2(0.5)) / gridSize;
+        float3 cellColor = source.sample(linearSampler, cellUv).rgb;
+        float toneGamma = clamp(uniforms.gamma, 0.50, 2.0);
+        cellColor = clamp(((cellColor + uniforms.brightness) - 0.5) * clamp(uniforms.contrast, 0.50, 2.0) + 0.5, float3(0.0), float3(1.0));
+        cellColor = pow(cellColor, float3(1.0 / toneGamma));
+        float lum = luminance(cellColor);
+        float exposed = pow(clamp((lum * 1.35) + 0.08, 0.0, 0.999), 0.72);
+        uint bucketIndex = uint(clamp(floor(exposed * float(uniforms.luminanceBuckets)), 0.0, float(uniforms.luminanceBuckets - 1)));
+        uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
+        cellMap.write(uint4(glyphIndex, 0, 0, 0), gid);
+    }
+
     fragment float4 fragment_ascii(VertexOut in [[stage_in]],
                                   texture2d<float> source [[texture(0)]],
                                   texture2d<float> glyphAtlas [[texture(1)]],
+                                  texture2d<uint> cellMap [[texture(2)]],
                                   constant Uniforms& uniforms [[buffer(0)]]) {
         float2 uv = clamp(in.uv, float2(0.0), float2(1.0));
         float2 gridSize = max(float2(1.0), floor(uniforms.viewportSize / max(1.0, uniforms.cellSize)));
@@ -426,8 +448,11 @@ enum ShaderSource {
         }
 
         if (uniforms.renderMode == 7) {
-            uint bucketIndex = uint(clamp(bucket, 0.0, float(uniforms.luminanceBuckets - 1)));
-            uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
+            uint2 cellIndex = uint2(
+                min(uint(floor(cell.x)), cellMap.get_width() - 1),
+                min(uint(floor(cell.y)), cellMap.get_height() - 1)
+            );
+            uint glyphIndex = cellMap.read(cellIndex).r;
             float dogGate = smoothstep(0.018, 0.085, dogContrast);
             float trueAsciiGradientEdge = smoothstep(0.30, 0.88, gradientMagnitude);
             float trueAsciiEdgeConfidence = trueAsciiGradientEdge * mix(0.58, 1.0, dogGate) * directionCoherence;
