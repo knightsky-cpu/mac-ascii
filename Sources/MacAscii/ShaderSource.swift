@@ -579,8 +579,8 @@ enum ShaderSource {
         displacement += waterRippleDisplacement(uv, uniforms.waterRipple5, outputSize, uniforms.time, 1.0);
         displacement += waterRippleDisplacement(uv, uniforms.waterRipple6, outputSize, uniforms.time, 1.0);
         displacement += waterRippleDisplacement(uv, uniforms.waterRipple7, outputSize, uniforms.time, 1.0);
-        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 8.6, 0.4, 17.0), outputSize, uniforms.time, 0.12);
-        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 13.2, 4.8, 73.0), outputSize, uniforms.time, 0.07);
+        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 8.6, 0.4, 17.0), outputSize, uniforms.time, 0.20);
+        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 13.2, 4.8, 73.0), outputSize, uniforms.time, 0.12);
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
         float3 color = source.sample(linearSampler, sampleUv).rgb;
