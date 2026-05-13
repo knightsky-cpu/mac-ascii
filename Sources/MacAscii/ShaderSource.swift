@@ -522,12 +522,31 @@ enum ShaderSource {
 
     float2 ambientWaterDisplacement(float2 uv, float2 outputSize, float time) {
         float aspect = outputSize.x / max(1.0, outputSize.y);
-        float slowX = sin((uv.y * 19.0) + (time * 0.72));
-        float slowY = sin((uv.x * 16.0 * aspect) + (time * 0.58));
-        float cross = sin(((uv.x * 10.0 * aspect) + (uv.y * 13.0)) - (time * 0.44));
+        float flowStep = time / 4.6;
+        float flowIndex = floor(flowStep);
+        float flowBlend = smoothstep(0.0, 1.0, fract(flowStep));
+        float2 flowA = normalize(float2(
+            (hash12(float2(flowIndex, 11.3)) * 2.0) - 1.0,
+            (hash12(float2(29.7, flowIndex)) * 2.0) - 1.0
+        ) + float2(0.0001));
+        float2 flowB = normalize(float2(
+            (hash12(float2(flowIndex + 1.0, 11.3)) * 2.0) - 1.0,
+            (hash12(float2(29.7, flowIndex + 1.0)) * 2.0) - 1.0
+        ) + float2(0.0001));
+        float2 flow = normalize(mix(flowA, flowB, flowBlend) + float2(0.0001));
+        float speedA = mix(0.62, 1.16, hash12(float2(flowIndex, 53.1)));
+        float speedB = mix(0.62, 1.16, hash12(float2(flowIndex + 1.0, 53.1)));
+        float speed = mix(speedA, speedB, flowBlend);
+        float2 rotatedUv = float2(
+            dot(uv, float2(flow.x, flow.y)),
+            dot(uv, float2(-flow.y, flow.x))
+        );
+        float slowX = sin((rotatedUv.y * 19.0) + (time * 0.72 * speed));
+        float slowY = sin((rotatedUv.x * 16.0 * aspect) + (time * 0.58 * (1.34 - (speed * 0.22))));
+        float cross = sin(((rotatedUv.x * 10.0 * aspect) + (rotatedUv.y * 13.0)) - (time * 0.44 * speed));
         return float2(
-            (slowX * 0.0017) + (cross * 0.0009),
-            (slowY * 0.0012) - (cross * 0.0007)
+            (slowX * 0.0021) + (cross * 0.0011),
+            (slowY * 0.0015) - (cross * 0.0009)
         );
     }
 
