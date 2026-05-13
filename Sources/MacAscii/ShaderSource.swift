@@ -71,6 +71,53 @@ enum ShaderSource {
         return min(bucketIndex, uint(19));
     }
 
+    float trueAsciiEdgeVote(texture2d<float, access::sample> source, float2 sampleUv, float2 texel, thread uint& direction) {
+        float rawLum = luminance(source.sample(linearSampler, sampleUv).rgb);
+        float lumLeft = luminance(source.sample(linearSampler, clamp(sampleUv + float2(-texel.x, 0.0), float2(0.0), float2(1.0))).rgb);
+        float lumRight = luminance(source.sample(linearSampler, clamp(sampleUv + float2(texel.x, 0.0), float2(0.0), float2(1.0))).rgb);
+        float lumTop = luminance(source.sample(linearSampler, clamp(sampleUv + float2(0.0, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottom = luminance(source.sample(linearSampler, clamp(sampleUv + float2(0.0, texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumTopLeft = luminance(source.sample(linearSampler, clamp(sampleUv + float2(-texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumTopRight = luminance(source.sample(linearSampler, clamp(sampleUv + float2(texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottomLeft = luminance(source.sample(linearSampler, clamp(sampleUv + float2(-texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
+        float lumBottomRight = luminance(source.sample(linearSampler, clamp(sampleUv + float2(texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
+        float localMean = (
+            lumTopLeft + lumTop + lumTopRight +
+            lumLeft + rawLum + lumRight +
+            lumBottomLeft + lumBottom + lumBottomRight
+        ) / 9.0;
+        float gradientX = (lumTopRight + (2.0 * lumRight) + lumBottomRight) - (lumTopLeft + (2.0 * lumLeft) + lumBottomLeft);
+        float gradientY = (lumBottomLeft + (2.0 * lumBottom) + lumBottomRight) - (lumTopLeft + (2.0 * lumTop) + lumTopRight);
+        float gradientMagnitude = length(float2(gradientX, gradientY));
+        float absX = abs(gradientX);
+        float absY = abs(gradientY);
+        float gradientSum = max(0.0001, absX + absY);
+        float majorGradient = max(absX, absY);
+        float minorGradient = min(absX, absY);
+        float axisDominance = majorGradient / gradientSum;
+        float axisMargin = (majorGradient - minorGradient) / gradientSum;
+        float diagonalBalance = 1.0 - axisMargin;
+        float directionCoherence = max(
+            smoothstep(0.58, 0.78, axisDominance),
+            smoothstep(0.42, 0.62, diagonalBalance)
+        );
+        float dogContrast = clamp(abs(rawLum - localMean) * 4.0, 0.0, 1.0);
+        float dogGate = smoothstep(0.018, 0.085, dogContrast);
+        float confidence = smoothstep(0.30, 0.88, gradientMagnitude) * mix(0.58, 1.0, dogGate) * directionCoherence;
+
+        if (absX > absY * 1.40) {
+            direction = 1; // |
+        } else if (absY > absX * 1.40) {
+            direction = 0; // _
+        } else if (gradientX * gradientY > 0.0) {
+            direction = 2; // /
+        } else {
+            direction = 3; // backslash
+        }
+
+        return confidence;
+    }
+
     float glyphMask(float bucket, float2 local) {
         float dotBottom = 1.0 - smoothstep(0.09, 0.13, distance(local, float2(0.5, 0.76)));
         float dotTop = 1.0 - smoothstep(0.08, 0.12, distance(local, float2(0.5, 0.38)));
@@ -119,46 +166,53 @@ enum ShaderSource {
         uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
 
         float2 texel = 1.0 / gridSize;
-        float lumLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, 0.0), float2(0.0), float2(1.0))).rgb);
-        float lumRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, 0.0), float2(0.0), float2(1.0))).rgb);
-        float lumTop = luminance(source.sample(linearSampler, clamp(cellUv + float2(0.0, -texel.y), float2(0.0), float2(1.0))).rgb);
-        float lumBottom = luminance(source.sample(linearSampler, clamp(cellUv + float2(0.0, texel.y), float2(0.0), float2(1.0))).rgb);
-        float lumTopLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
-        float lumTopRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, -texel.y), float2(0.0), float2(1.0))).rgb);
-        float lumBottomLeft = luminance(source.sample(linearSampler, clamp(cellUv + float2(-texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
-        float lumBottomRight = luminance(source.sample(linearSampler, clamp(cellUv + float2(texel.x, texel.y), float2(0.0), float2(1.0))).rgb);
-        float localMean = (
-            lumTopLeft + lumTop + lumTopRight +
-            lumLeft + rawLum + lumRight +
-            lumBottomLeft + lumBottom + lumBottomRight
-        ) / 9.0;
-        float dogContrast = clamp(abs(rawLum - localMean) * 4.0, 0.0, 1.0);
-        float gradientX = (lumTopRight + (2.0 * lumRight) + lumBottomRight) - (lumTopLeft + (2.0 * lumLeft) + lumBottomLeft);
-        float gradientY = (lumBottomLeft + (2.0 * lumBottom) + lumBottomRight) - (lumTopLeft + (2.0 * lumTop) + lumTopRight);
-        float gradientMagnitude = length(float2(gradientX, gradientY));
-        float absX = abs(gradientX);
-        float absY = abs(gradientY);
-        float majorGradient = max(absX, absY);
-        float minorGradient = min(absX, absY);
-        float gradientSum = max(0.0001, absX + absY);
-        float axisDominance = majorGradient / gradientSum;
-        float axisMargin = (majorGradient - minorGradient) / gradientSum;
-        float diagonalBalance = 1.0 - axisMargin;
-        float directionCoherence = max(
-            smoothstep(0.58, 0.78, axisDominance),
-            smoothstep(0.42, 0.62, diagonalBalance)
-        );
-        float dogGate = smoothstep(0.018, 0.085, dogContrast);
-        float trueAsciiGradientEdge = smoothstep(0.30, 0.88, gradientMagnitude);
-        float trueAsciiEdgeConfidence = trueAsciiGradientEdge * mix(0.58, 1.0, dogGate) * directionCoherence;
-        bool diagonalEdge = !(absX > absY * 1.40) && !(absY > absX * 1.40);
-        float trueAsciiEdgeThreshold = diagonalEdge ? 0.48 : 0.28;
-        if (trueAsciiEdgeConfidence >= trueAsciiEdgeThreshold) {
-            if (absX > absY * 1.40) {
-                glyphIndex = 21; // |
-            } else if (absY > absX * 1.40) {
+        float2 offsets[5] = {
+            float2(0.0, 0.0),
+            float2(-0.28, -0.28),
+            float2(0.28, -0.28),
+            float2(-0.28, 0.28),
+            float2(0.28, 0.28)
+        };
+        float directionScores[4] = {0.0, 0.0, 0.0, 0.0};
+        float totalEdgeConfidence = 0.0;
+        for (uint sampleIndex = 0; sampleIndex < 5; sampleIndex++) {
+            uint direction = 0;
+            float2 sampleUv = clamp(cellUv + (offsets[sampleIndex] / gridSize), float2(0.0), float2(1.0));
+            float confidence = trueAsciiEdgeVote(source, sampleUv, texel, direction);
+            directionScores[direction] += confidence;
+            totalEdgeConfidence += confidence;
+        }
+
+        float bestScore = directionScores[0];
+        uint bestDirection = 0;
+        float runnerUpScore = 0.0;
+        for (uint direction = 1; direction < 4; direction++) {
+            float score = directionScores[direction];
+            if (score > bestScore) {
+                runnerUpScore = bestScore;
+                bestScore = score;
+                bestDirection = direction;
+            } else {
+                runnerUpScore = max(runnerUpScore, score);
+            }
+        }
+
+        float dominance = bestScore / max(0.0001, totalEdgeConfidence);
+        float margin = (bestScore - runnerUpScore) / max(0.0001, totalEdgeConfidence);
+        bool diagonalEdge = bestDirection >= 2;
+        float edgeThreshold = diagonalEdge ? 1.18 : 0.82;
+        float dominanceThreshold = diagonalEdge ? 0.58 : 0.46;
+        float marginThreshold = diagonalEdge ? 0.18 : 0.08;
+        if (
+            bestScore >= edgeThreshold &&
+            dominance >= dominanceThreshold &&
+            margin >= marginThreshold
+        ) {
+            if (bestDirection == 0) {
                 glyphIndex = 20; // _
-            } else if (gradientX * gradientY > 0.0) {
+            } else if (bestDirection == 1) {
+                glyphIndex = 21; // |
+            } else if (bestDirection == 2) {
                 glyphIndex = 22; // /
             } else {
                 glyphIndex = 23; // backslash
