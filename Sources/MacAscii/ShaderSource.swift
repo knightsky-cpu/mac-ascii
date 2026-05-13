@@ -469,7 +469,7 @@ enum ShaderSource {
         output.write(float4(color, 1.0), gid);
     }
 
-    float2 waterRippleDisplacement(float2 uv, float4 ripple, float2 outputSize, float time) {
+    float2 waterRippleDisplacement(float2 uv, float4 ripple, float2 outputSize, float time, float strength) {
         if (ripple.w < 0.5) {
             return float2(0.0);
         }
@@ -517,7 +517,28 @@ enum ShaderSource {
         float innerWake = (1.0 - smoothstep(0.0, leadRadius, dist)) *
                           smoothstep(0.0, 0.20, age) *
                           decay * 0.006;
-        return direction * (amplitude + innerWake);
+        return direction * (amplitude + innerWake) * strength;
+    }
+
+    float2 ambientWaterDisplacement(float2 uv, float2 outputSize, float time) {
+        float aspect = outputSize.x / max(1.0, outputSize.y);
+        float slowX = sin((uv.y * 19.0) + (time * 0.72));
+        float slowY = sin((uv.x * 16.0 * aspect) + (time * 0.58));
+        float cross = sin(((uv.x * 10.0 * aspect) + (uv.y * 13.0)) - (time * 0.44));
+        return float2(
+            (slowX * 0.0012) + (cross * 0.0007),
+            (slowY * 0.0009) - (cross * 0.0005)
+        );
+    }
+
+    float4 automaticWaterRipple(float time, float interval, float phase, float seed) {
+        float eventTime = floor((time + phase) / interval);
+        float age = fmod(time + phase, interval);
+        float2 center = float2(
+            0.12 + (hash12(float2(seed, eventTime)) * 0.76),
+            0.12 + (hash12(float2(eventTime, seed + 9.37)) * 0.76)
+        );
+        return float4(center, time - age, 1.0);
     }
 
     kernel void compute_water_bend(texture2d<float, access::sample> source [[texture(0)]],
@@ -530,15 +551,18 @@ enum ShaderSource {
 
         float2 outputSize = float2(float(output.get_width()), float(output.get_height()));
         float2 uv = (float2(gid) + float2(0.5)) / outputSize;
-        float2 displacement = float2(0.0);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple0, outputSize, uniforms.time);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple1, outputSize, uniforms.time);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple2, outputSize, uniforms.time);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple3, outputSize, uniforms.time);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple4, outputSize, uniforms.time);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple5, outputSize, uniforms.time);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple6, outputSize, uniforms.time);
-        displacement += waterRippleDisplacement(uv, uniforms.waterRipple7, outputSize, uniforms.time);
+        float2 displacement = ambientWaterDisplacement(uv, outputSize, uniforms.time);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple0, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple1, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple2, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple3, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple4, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple5, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple6, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, uniforms.waterRipple7, outputSize, uniforms.time, 1.0);
+        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 4.8, 0.4, 17.0), outputSize, uniforms.time, 0.16);
+        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 6.7, 2.1, 41.0), outputSize, uniforms.time, 0.11);
+        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 8.9, 5.3, 73.0), outputSize, uniforms.time, 0.08);
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
         float3 color = source.sample(linearSampler, sampleUv).rgb;
