@@ -526,8 +526,8 @@ enum ShaderSource {
         float slowY = sin((uv.x * 16.0 * aspect) + (time * 0.58));
         float cross = sin(((uv.x * 10.0 * aspect) + (uv.y * 13.0)) - (time * 0.44));
         return float2(
-            (slowX * 0.0012) + (cross * 0.0007),
-            (slowY * 0.0009) - (cross * 0.0005)
+            (slowX * 0.0017) + (cross * 0.0009),
+            (slowY * 0.0012) - (cross * 0.0007)
         );
     }
 
@@ -560,9 +560,8 @@ enum ShaderSource {
         displacement += waterRippleDisplacement(uv, uniforms.waterRipple5, outputSize, uniforms.time, 1.0);
         displacement += waterRippleDisplacement(uv, uniforms.waterRipple6, outputSize, uniforms.time, 1.0);
         displacement += waterRippleDisplacement(uv, uniforms.waterRipple7, outputSize, uniforms.time, 1.0);
-        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 4.8, 0.4, 17.0), outputSize, uniforms.time, 0.16);
-        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 6.7, 2.1, 41.0), outputSize, uniforms.time, 0.11);
-        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 8.9, 5.3, 73.0), outputSize, uniforms.time, 0.08);
+        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 8.6, 0.4, 17.0), outputSize, uniforms.time, 0.12);
+        displacement += waterRippleDisplacement(uv, automaticWaterRipple(uniforms.time, 13.2, 4.8, 73.0), outputSize, uniforms.time, 0.07);
 
         float2 sampleUv = clamp(uv - displacement, float2(0.0), float2(1.0));
         float3 color = source.sample(linearSampler, sampleUv).rgb;
