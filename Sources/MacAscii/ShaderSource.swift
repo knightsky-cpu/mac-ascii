@@ -159,7 +159,8 @@ enum ShaderSource {
             0.0,
             1.0
         );
-        float styleMask = uniforms.renderMode == 0 ? asciiNormalizedMask : asciiMask;
+        bool asciiLikeMode = uniforms.renderMode == 0 || uniforms.renderMode == 7;
+        float styleMask = asciiLikeMode ? asciiNormalizedMask : asciiMask;
 
         float3 posterColor = floor((pow(clamp(cellColor, float3(0.0), float3(1.0)), float3(0.9)) * 9.0) + 0.5) / 9.0;
         float grayValue = luminance(posterColor);

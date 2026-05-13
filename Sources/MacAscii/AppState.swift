@@ -19,6 +19,7 @@ enum RenderMode: String, CaseIterable {
     case blockyRetro
     case matrixRain
     case cyberpunk
+    case trueAscii
 
     var name: String {
         switch self {
@@ -30,6 +31,8 @@ enum RenderMode: String, CaseIterable {
             return "matrix-rain"
         case .cyberpunk:
             return "cyberpunk"
+        case .trueAscii:
+            return "true-ascii"
         }
     }
 
@@ -43,6 +46,8 @@ enum RenderMode: String, CaseIterable {
             return 5
         case .cyberpunk:
             return 6
+        case .trueAscii:
+            return 7
         }
     }
 }
