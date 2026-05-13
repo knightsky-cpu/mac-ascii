@@ -219,9 +219,14 @@ enum ShaderSource {
             }
         }
 
+        float edgeConfidence = clamp(bestScore / 2.20, 0.0, 1.0);
+        uint packedEdge = (bestDirection + 1u) |
+            (uint(round(edgeConfidence * 255.0)) << 8) |
+            (uint(round(clamp(dominance, 0.0, 1.0) * 255.0)) << 16);
+
         uint3 color8 = uint3(round(clamp(cellColor, float3(0.0), float3(1.0)) * 255.0));
         uint packedColor = color8.r | (color8.g << 8) | (color8.b << 16);
-        cellMap.write(uint4(glyphIndex, bucketIndex, packedColor, 0), gid);
+        cellMap.write(uint4(glyphIndex, bucketIndex, packedColor, packedEdge), gid);
     }
 
     fragment float4 fragment_ascii(VertexOut in [[stage_in]],
@@ -452,6 +457,36 @@ enum ShaderSource {
                 blockColor = mix(float3(0.04, 0.05, 0.08), float3(0.72, 0.84, 1.0), blockLum);
             } else if (uniforms.styleMode == 10) {
                 blockColor = thermalHot;
+            }
+
+            if (uniforms.renderMode == 8) {
+                uint packedEdge = blockCellData.a;
+                uint edgeDirectionCode = packedEdge & 255u;
+                float computeEdge = float((packedEdge >> 8) & 255u) / 255.0;
+                float edgeDominance = float((packedEdge >> 16) & 255u) / 255.0;
+
+                float trueEdgeHorizontal = rect(local, float2(0.08, 0.66), float2(0.92, 0.88));
+                float trueEdgeVertical = rect(local, float2(0.38, 0.08), float2(0.62, 0.92));
+                float trueEdgeSlash = 1.0 - smoothstep(0.08, 0.18, abs((local.x + local.y) - 1.0));
+                trueEdgeSlash *= rect(local, float2(0.05), float2(0.95));
+                float trueEdgeBackslash = 1.0 - smoothstep(0.08, 0.18, abs(local.x - local.y));
+                trueEdgeBackslash *= rect(local, float2(0.05), float2(0.95));
+
+                float trueEdgeShape = trueEdgeHorizontal;
+                if (edgeDirectionCode == 2u) {
+                    trueEdgeShape = trueEdgeVertical;
+                } else if (edgeDirectionCode == 3u) {
+                    trueEdgeShape = trueEdgeSlash;
+                } else if (edgeDirectionCode == 4u) {
+                    trueEdgeShape = trueEdgeBackslash;
+                }
+
+                float trueEdgeStrength = clamp((computeEdge * 1.35) + (edgeDominance * 0.18), 0.0, 1.0);
+                float trueEdgeMask = smoothstep(0.12, 0.74, trueEdgeShape * trueEdgeStrength);
+                float3 edgeLight = clamp((blockColor * 1.42) + float3(0.06), float3(0.0), float3(1.0));
+                float3 edgeDark = blockColor * 0.34;
+                blockColor = mix(blockColor, edgeDark, trueEdgeMask * 0.32);
+                blockColor = mix(blockColor, edgeLight, trueEdgeMask * 0.24);
             }
 
             float leftBevel = 1.0 - smoothstep(0.06, 0.18, local.x);

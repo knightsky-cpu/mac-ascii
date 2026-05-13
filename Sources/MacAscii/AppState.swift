@@ -15,44 +15,44 @@ enum LuminanceMode: String, CaseIterable {
 }
 
 enum RenderMode: String, CaseIterable {
+    case trueAscii
     case ascii
-    case blockyRetro
     case trueBlockyRetro
+    case blockyRetro
     case matrixRain
     case cyberpunk
-    case trueAscii
 
     var name: String {
         switch self {
+        case .trueAscii:
+            return "true-ascii"
         case .ascii:
             return "ascii"
-        case .blockyRetro:
-            return "blocky-retro"
         case .trueBlockyRetro:
             return "true-blocky-retro"
+        case .blockyRetro:
+            return "blocky-retro"
         case .matrixRain:
             return "matrix-rain"
         case .cyberpunk:
             return "cyberpunk"
-        case .trueAscii:
-            return "true-ascii"
         }
     }
 
     var mode: Int32 {
         switch self {
+        case .trueAscii:
+            return 7
         case .ascii:
             return 0
-        case .blockyRetro:
-            return 1
         case .trueBlockyRetro:
             return 8
+        case .blockyRetro:
+            return 1
         case .matrixRain:
             return 5
         case .cyberpunk:
             return 6
-        case .trueAscii:
-            return 7
         }
     }
 }
@@ -70,7 +70,7 @@ struct VisualStyle {
 final class AppState {
     static let defaultGridName = "pixel-ascii"
     static let defaultStyleName = "classic-amber"
-    static let defaultRenderMode: RenderMode = .ascii
+    static let defaultRenderMode: RenderMode = .trueAscii
     static let defaultLuminanceMode: LuminanceMode = .classic10
     static let defaultFrameRate = 30
     static let defaultOverlayVisible = true
@@ -137,7 +137,7 @@ final class AppState {
 
     private(set) var gridIndex = 0
     private(set) var styleIndex = 0
-    private(set) var renderMode: RenderMode = .ascii
+    private(set) var renderMode: RenderMode = AppState.defaultRenderMode
     private(set) var luminanceMode: LuminanceMode = .classic10
     private(set) var frameRate = AppState.defaultFrameRate
     private(set) var overlayVisible = true
