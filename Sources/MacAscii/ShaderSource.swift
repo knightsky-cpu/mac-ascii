@@ -161,7 +161,8 @@ enum ShaderSource {
         cellColor = clamp(((cellColor + uniforms.brightness) - 0.5) * clamp(uniforms.contrast, 0.50, 2.0) + 0.5, float3(0.0), float3(1.0));
         cellColor = pow(cellColor, float3(1.0 / toneGamma));
         float lum = luminance(cellColor);
-        float exposed = pow(clamp((lum * 1.35) + 0.08, 0.0, 0.999), 0.72);
+        float glyphLum = mix(lum, rawLum, 0.15);
+        float exposed = pow(clamp((glyphLum * 1.35) + 0.08, 0.0, 0.999), 0.72);
         uint bucketIndex = uint(clamp(floor(exposed * float(uniforms.luminanceBuckets)), 0.0, float(uniforms.luminanceBuckets - 1)));
         uint glyphIndex = trueAsciiGlyphIndex(bucketIndex, uniforms.luminanceBuckets);
 
