@@ -576,8 +576,8 @@ enum ShaderSource {
             (hash12(float2(29.7, flowIndex + 1.0)) * 2.0) - 1.0
         ) + float2(0.0001));
         float2 flow = normalize(mix(flowA, flowB, flowBlend) + float2(0.0001));
-        float speedA = mix(0.62, 1.16, hash12(float2(flowIndex, 53.1)));
-        float speedB = mix(0.62, 1.16, hash12(float2(flowIndex + 1.0, 53.1)));
+        float speedA = mix(0.62, 1.04, hash12(float2(flowIndex, 53.1)));
+        float speedB = mix(0.62, 1.04, hash12(float2(flowIndex + 1.0, 53.1)));
         float speed = mix(speedA, speedB, flowBlend);
         float2 rotatedUv = float2(
             dot(uv, float2(flow.x, flow.y)),
